@@ -19,6 +19,8 @@ async function bootstrap() {
       'http://localhost:8081',
       'http://localhost:8082',
       'http://localhost:8083',
+      'https://artuch.org',
+      'https://www.artuch.org',
     ],
     credentials: true,
   });
