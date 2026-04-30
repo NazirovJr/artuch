@@ -8,11 +8,14 @@ import { InventoryItem } from './inventory/entities/inventory-item.entity';
 import { MenuItem } from './restaurant/entities/menu-item.entity';
 import { Tour } from './tours/entities/tour.entity';
 import { Room } from './hotel/entities/room.entity';
+import { RoomType } from './hotel/entities/room-type.entity';
+import { Guest } from './hotel/entities/guest.entity';
 import { WarehouseItem } from './warehouse/entities/warehouse-item.entity';
 import { Warehouse } from './warehouses/entities/warehouse.entity';
 import { Outlet } from './outlets/entities/outlet.entity';
 import { UserOutlet } from './outlets/entities/user-outlet.entity';
 import { CleaningChecklistTemplate } from './cleaning/entities/cleaning-checklist-template.entity';
+import { StockLevel } from './stock/entities/stock-level.entity';
 
 @Injectable()
 export class SeedService {
@@ -29,6 +32,18 @@ export class SeedService {
     // and it lets us add new roles (like `owner`) to older databases
     // without resetting anything.
     await this.ensureSystemRoles();
+
+    // Same idea for legacy display-style role strings on user rows
+    // ('shop-seller' / 'bartender' / 'warehouse'). Frontend gates compare
+    // role literals; backend ROLE_ALIASES handle CASL but not the UI.
+    // Idempotent UPDATEs run on every boot so legacy DBs heal themselves.
+    await this.migrateLegacyUserRoles();
+
+    // Sample guests are idempotent (skips when guests table is non-empty),
+    // so we run them on every boot to fix older installs that came up
+    // before the seed was written. Without this, the "Новое бронирование"
+    // form has nothing to pick from and looks broken.
+    await this.seedGuests();
 
     if (userCount > 0 && roleCount > 0) {
       console.log('Database already seeded, skipping user/data seeding...');
@@ -49,11 +64,87 @@ export class SeedService {
     await this.seedInventory();
     await this.seedMenu();
     await this.seedTours();
+    await this.seedRoomTypes();
     await this.seedRooms();
+    // seedGuests already ran above (idempotent block) — no need to call
+    // it again here.
     await this.seedWarehouse();
     await this.seedCleaningTemplates();
+    await this.backfillStockLevels();
 
     console.log('Database seeded successfully!');
+  }
+
+  /**
+   * Mirror existing WarehouseItem.quantity and InventoryItem.stock into the
+   * unified `stock_levels` table. Idempotent: skips items that already have
+   * a corresponding stock_level row. Run on every startup so legacy installs
+   * pick up the unified model the first time the new code lands.
+   *
+   * Reservation is initialised from InventoryItem.rentedQuantity so the
+   * "available = quantity - reserved" invariant holds from the start.
+   */
+  private async backfillStockLevels() {
+    const stockRepo = this.dataSource.getRepository(StockLevel);
+    const warehouseItemRepo = this.dataSource.getRepository(WarehouseItem);
+    const inventoryItemRepo = this.dataSource.getRepository(InventoryItem);
+
+    const existingCount = await stockRepo.count();
+    let added = 0;
+
+    const warehouseItems = await warehouseItemRepo.find();
+    for (const item of warehouseItems) {
+      if (!item.warehouseId) continue;
+      const existing = await stockRepo.findOne({
+        where: {
+          source: 'warehouse',
+          itemId: item.id,
+          locationId: item.warehouseId,
+        },
+      });
+      if (existing) continue;
+      await stockRepo.save(
+        stockRepo.create({
+          source: 'warehouse',
+          itemId: item.id,
+          locationId: item.warehouseId,
+          locationKind: 'warehouse',
+          quantity: Number(item.quantity),
+          reservedQuantity: 0,
+        }),
+      );
+      added += 1;
+    }
+
+    const inventoryItems = await inventoryItemRepo.find();
+    for (const item of inventoryItems) {
+      const locationId = item.warehouseId ?? '__pos_default__';
+      const existing = await stockRepo.findOne({
+        where: {
+          source: 'inventory',
+          itemId: item.id,
+          locationId,
+        },
+      });
+      if (existing) continue;
+      await stockRepo.save(
+        stockRepo.create({
+          source: 'inventory',
+          itemId: item.id,
+          locationId,
+          locationKind: item.warehouseId ? 'warehouse' : 'outlet',
+          quantity: Number(item.stock),
+          reservedQuantity: Number(item.rentedQuantity ?? 0),
+        }),
+      );
+      added += 1;
+    }
+
+    if (added > 0) {
+      console.log(
+        `  Backfilled ${added} stock_level rows (existing: ${existingCount})`,
+      );
+    }
   }
 
   /**
@@ -127,6 +218,41 @@ export class SeedService {
     if (permsAdded > 0) console.log(`  Added ${permsAdded} missing permission(s) on existing roles`);
   }
 
+  /**
+   * Heal legacy user.role strings to canonical names. Older seeds inserted
+   * display-style values ('shop-seller', 'bartender', 'warehouse') while
+   * the rest of the codebase — frontend drawer gates, role-aware home
+   * dashboard, role registry — has standardised on canonical names
+   * ('cashier', 'barman', 'warehouse-keeper'). Without this, a re-installed
+   * frontend hits a DB that still serves legacy strings and silently hides
+   * the POS/Warehouse tabs.
+   *
+   * Backend's CASL ROLE_ALIASES still bridges the gap for in-flight JWTs,
+   * so users don't lose access mid-session — but new logins issue JWTs
+   * with canonical strings as soon as their row is migrated here.
+   *
+   * Idempotent: UPDATEs WHERE role = legacy; running twice changes 0 rows.
+   */
+  private async migrateLegacyUserRoles() {
+    const userRepo = this.dataSource.getRepository(User);
+    const mapping: Array<[string, string]> = [
+      ['shop-seller', 'cashier'],
+      ['bartender', 'barman'],
+      ['warehouse', 'warehouse-keeper'],
+    ];
+    let migrated = 0;
+    for (const [legacy, canonical] of mapping) {
+      const res = await userRepo.update(
+        { role: legacy as any },
+        { role: canonical as any },
+      );
+      migrated += res.affected ?? 0;
+    }
+    if (migrated > 0) {
+      console.log(`  Migrated ${migrated} user(s) from legacy role strings`);
+    }
+  }
+
   private canonicalRoleDefs(): Array<{
     name: string;
     description: string;
@@ -144,13 +270,24 @@ export class SeedService {
           { action: 'manage', subject: 'Refund' },
           { action: 'manage', subject: 'Order' },
           { action: 'manage', subject: 'Warehouse' },
+          { action: 'manage', subject: 'WarehouseItem' },
+          { action: 'manage', subject: 'WarehouseTransaction' },
+          { action: 'manage', subject: 'StockTransfer' },
+          { action: 'manage', subject: 'Stocktake' },
+          { action: 'manage', subject: 'StocktakeLine' },
+          { action: 'manage', subject: 'LowStockAlert' },
+          { action: 'manage', subject: 'Supplier' },
+          { action: 'manage', subject: 'InventoryItem' },
+          { action: 'manage', subject: 'InventoryMovement' },
           { action: 'manage', subject: 'Reservation' },
+          { action: 'manage', subject: 'BookingGroup' },
           { action: 'manage', subject: 'Folio' },
           { action: 'manage', subject: 'Rental' },
           { action: 'manage', subject: 'CleaningTask' },
           { action: 'manage', subject: 'Shift' },
           { action: 'read', subject: 'OrderEditLog' },
-          { action: 'read', subject: 'Room' },
+          { action: 'manage', subject: 'Room' },
+          { action: 'manage', subject: 'RoomType' },
           { action: 'read', subject: 'User' },
           { action: 'read', subject: 'Outlet' },
           { action: 'read', subject: 'Analytics' },
@@ -160,22 +297,32 @@ export class SeedService {
           { action: 'create', subject: 'Transaction' },
           { action: 'read', subject: 'Transaction', conditions: { employeeId: '${user.id}' } },
           { action: 'read', subject: 'InventoryItem' },
+          { action: 'create', subject: 'InventoryMovement' },
+          { action: 'read', subject: 'InventoryMovement' },
+          { action: 'read', subject: 'LowStockAlert' },
           { action: 'create', subject: 'Refund' },
           { action: 'read', subject: 'Refund' },
           // Post charges onto a guest's folio (e.g. shop purchase billed to room).
           { action: 'read', subject: 'Folio' },
           { action: 'update', subject: 'Folio' },
+          // Read-only on groups so the UI can show "billed to group G-..." when the
+          // guest's folio is a group's master folio.
+          { action: 'read', subject: 'BookingGroup' },
         ] },
       { name: 'barman', description: 'Бармен', isSystem: true,
         permissions: [
           { action: 'create', subject: 'Transaction' },
           { action: 'read', subject: 'Transaction', conditions: { employeeId: '${user.id}' } },
           { action: 'read', subject: 'InventoryItem' },
+          { action: 'create', subject: 'InventoryMovement' },
+          { action: 'read', subject: 'InventoryMovement' },
+          { action: 'read', subject: 'LowStockAlert' },
           { action: 'create', subject: 'Refund' },
           { action: 'read', subject: 'Refund' },
           // Post charges onto a guest's folio (bar drinks billed to room).
           { action: 'read', subject: 'Folio' },
           { action: 'update', subject: 'Folio' },
+          { action: 'read', subject: 'BookingGroup' },
         ] },
       { name: 'waiter', description: 'Официант', isSystem: true,
         permissions: [
@@ -186,6 +333,7 @@ export class SeedService {
           // Post restaurant charges onto a guest's folio (meal billed to room).
           { action: 'read', subject: 'Folio' },
           { action: 'update', subject: 'Folio' },
+          { action: 'read', subject: 'BookingGroup' },
         ] },
       { name: 'cook', description: 'Повар', isSystem: true,
         permissions: [
@@ -194,8 +342,14 @@ export class SeedService {
         ] },
       { name: 'reception', description: 'Ресепшен', isSystem: true,
         permissions: [
-          { action: 'manage', subject: 'Room' },
+          // Reception can read+update rooms (status/cleaning) but cannot
+          // create or delete physical rooms — that's owner/admin/manager
+          // territory via the manage-Room policy.
+          { action: 'read', subject: 'Room' },
+          { action: 'update', subject: 'Room' },
+          { action: 'read', subject: 'RoomType' },
           { action: 'manage', subject: 'Reservation' },
+          { action: 'manage', subject: 'BookingGroup' },
           { action: 'manage', subject: 'Guest' },
           { action: 'manage', subject: 'Folio' },
           { action: 'read', subject: 'CleaningTask' },
@@ -205,6 +359,7 @@ export class SeedService {
         permissions: [
           { action: 'read', subject: 'Room' },
           { action: 'update', subject: 'Room' },
+          { action: 'read', subject: 'RoomType' },
           { action: 'read', subject: 'CleaningTask' },
           { action: 'update', subject: 'CleaningTask' },
         ] },
@@ -212,7 +367,19 @@ export class SeedService {
         permissions: [
           { action: 'manage', subject: 'WarehouseItem' },
           { action: 'manage', subject: 'WarehouseTransaction' },
+          { action: 'manage', subject: 'StockTransfer' },
+          { action: 'manage', subject: 'Stocktake' },
+          { action: 'manage', subject: 'StocktakeLine' },
+          { action: 'manage', subject: 'LowStockAlert' },
+          { action: 'manage', subject: 'Supplier' },
+          // Rentals are explicitly listed in the warehouse-keeper drawer
+          // ("Аренды" / "Новая аренда") — without this subject the screen
+          // 403's and surfaces as an empty list with no error feedback.
+          { action: 'manage', subject: 'Rental' },
           { action: 'read', subject: 'Warehouse' },
+          { action: 'read', subject: 'InventoryItem' },
+          { action: 'create', subject: 'InventoryMovement' },
+          { action: 'read', subject: 'InventoryMovement' },
         ] },
       { name: 'rental-operator', description: 'Оператор проката', isSystem: true,
         permissions: [
@@ -257,16 +424,18 @@ export class SeedService {
     }
 
     await repo.save([
-      // Shop/Bar users
-      { username: 'shop', passwordHash: hash('1234'), fullName: 'Продавец магазина', role: 'shop-seller', roleId: roleMap.get('cashier') },
-      { username: 'bar', passwordHash: hash('1234'), fullName: 'Бармен', role: 'bartender', roleId: roleMap.get('barman') },
+      // Shop/Bar users — canonical role strings (must match canonicalRoleDefs).
+      // Frontend gates (MainDrawer, roleBlocks) compare against these literally,
+      // so display-style names like 'shop-seller' would silently hide the POS.
+      { username: 'shop', passwordHash: hash('1234'), fullName: 'Продавец магазина', role: 'cashier', roleId: roleMap.get('cashier') },
+      { username: 'bar', passwordHash: hash('1234'), fullName: 'Бармен', role: 'barman', roleId: roleMap.get('barman') },
       { username: 'owner', passwordHash: hash('admin'), fullName: 'Владелец', role: 'owner', roleId: roleMap.get('owner'), pin: hash('2222') },
       // Restaurant/Hotel users
       { username: 'waiter1', passwordHash: hash('waiter123'), fullName: 'Фарход', role: 'waiter', roleId: roleMap.get('waiter'), pin: hash('3333') },
       { username: 'waiter2', passwordHash: hash('waiter123'), fullName: 'Малика', role: 'waiter', roleId: roleMap.get('waiter') },
       { username: 'cook1', passwordHash: hash('cook123'), fullName: 'Рустам', role: 'cook', roleId: roleMap.get('cook') },
       { username: 'admin', passwordHash: hash('admin123'), fullName: 'Администратор', role: 'admin', roleId: roleMap.get('admin'), pin: hash('1111') },
-      { username: 'warehouse1', passwordHash: hash('warehouse123'), fullName: 'Склад', role: 'warehouse', roleId: roleMap.get('warehouse-keeper') },
+      { username: 'warehouse1', passwordHash: hash('warehouse123'), fullName: 'Склад', role: 'warehouse-keeper', roleId: roleMap.get('warehouse-keeper') },
       { username: 'reception1', passwordHash: hash('reception123'), fullName: 'Ресепшн', role: 'reception', roleId: roleMap.get('reception') },
       { username: 'cleaning1', passwordHash: hash('cleaning123'), fullName: 'Уборка', role: 'cleaning', roleId: roleMap.get('cleaning') },
       // Tourist
@@ -470,18 +639,145 @@ export class SeedService {
     ]);
   }
 
+  private async seedRoomTypes() {
+    const repo = this.dataSource.getRepository(RoomType);
+    if ((await repo.count()) > 0) return;
+    await repo.save([
+      {
+        code: 'luxury',
+        name: 'Люкс',
+        nameEn: 'Luxury',
+        description:
+          'Просторный номер с видом на Фанские горы. Большая кровать, отдельная гостиная зона, мини-бар, душевая.',
+        descriptionEn:
+          'Spacious mountain-view suite with king bed, lounge, minibar, walk-in shower.',
+        maxGuests: 4,
+        maxAdults: 2,
+        maxChildren: 2,
+        beds: 2,
+        bedConfiguration: '1 king + 1 sofa',
+        sizeM2: 35,
+        view: 'mountain',
+        basePrice: 400,
+        weekendPrice: 450,
+        amenities: ['wifi', 'ac', 'balcony', 'minibar', 'safe', 'tv', 'hairdryer', 'kettle', 'workspace'],
+        breakfastIncluded: true,
+        smokingAllowed: false,
+        petsAllowed: false,
+        accessibleForDisabled: false,
+        childrenAllowed: true,
+        minStayNights: 1,
+        maxStayNights: 14,
+        displayOrder: 1,
+        photos: [],
+      },
+      {
+        code: 'semi-luxury',
+        name: 'Полу-люкс',
+        nameEn: 'Semi-Luxury',
+        description: 'Двухместный номер с балконом. Удобная кровать, рабочая зона, душевая.',
+        maxGuests: 3,
+        maxAdults: 2,
+        maxChildren: 1,
+        beds: 2,
+        bedConfiguration: '1 queen + 1 single',
+        sizeM2: 25,
+        view: 'mountain',
+        basePrice: 250,
+        weekendPrice: 280,
+        amenities: ['wifi', 'ac', 'balcony', 'tv', 'hairdryer', 'kettle'],
+        breakfastIncluded: true,
+        childrenAllowed: true,
+        minStayNights: 1,
+        maxStayNights: 21,
+        displayOrder: 2,
+        photos: [],
+      },
+      {
+        code: 'economy',
+        name: 'Эконом',
+        nameEn: 'Economy',
+        description:
+          'Простой комфортный номер для альпинистов и треккеров. Тёплый душ, чистое бельё, минимум излишеств.',
+        maxGuests: 4,
+        maxAdults: 4,
+        maxChildren: 2,
+        beds: 4,
+        bedConfiguration: '4 single bunks',
+        sizeM2: 18,
+        view: 'courtyard',
+        basePrice: 150,
+        weekendPrice: 180,
+        amenities: ['wifi', 'tv'],
+        breakfastIncluded: false,
+        childrenAllowed: true,
+        minStayNights: 1,
+        maxStayNights: 30,
+        displayOrder: 3,
+        photos: [],
+      },
+    ]);
+    console.log('  Seeded 3 room types');
+  }
+
   private async seedRooms() {
     const repo = this.dataSource.getRepository(Room);
+    const typesRepo = this.dataSource.getRepository(RoomType);
+    const types = await typesRepo.find();
+    const byCode = new Map(types.map((t) => [t.code, t.id]));
+
     await repo.save([
-      { number: 1, type: 'luxury', beds: 2, maxGuests: 2, pricePerNight: 350, status: 'available', cleaningStatus: 'clean' },
-      { number: 2, type: 'luxury', beds: 2, maxGuests: 3, pricePerNight: 400, status: 'available', cleaningStatus: 'clean' },
-      { number: 3, type: 'semi-luxury', beds: 2, maxGuests: 2, pricePerNight: 250, status: 'available', cleaningStatus: 'clean' },
-      { number: 4, type: 'semi-luxury', beds: 3, maxGuests: 3, pricePerNight: 280, status: 'available', cleaningStatus: 'clean' },
-      { number: 5, type: 'economy', beds: 2, maxGuests: 2, pricePerNight: 150, status: 'available', cleaningStatus: 'clean' },
-      { number: 6, type: 'economy', beds: 4, maxGuests: 4, pricePerNight: 200, status: 'available', cleaningStatus: 'clean' },
-      { number: 7, type: 'economy', beds: 3, maxGuests: 3, pricePerNight: 180, status: 'available', cleaningStatus: 'clean' },
-      { number: 8, type: 'luxury', beds: 2, maxGuests: 4, pricePerNight: 450, status: 'available', cleaningStatus: 'clean' },
+      { number: 1, type: 'luxury', roomTypeId: byCode.get('luxury'), beds: 2, maxGuests: 2, pricePerNight: 350, status: 'available', cleaningStatus: 'clean' },
+      { number: 2, type: 'luxury', roomTypeId: byCode.get('luxury'), beds: 2, maxGuests: 3, pricePerNight: 400, status: 'available', cleaningStatus: 'clean' },
+      { number: 3, type: 'semi-luxury', roomTypeId: byCode.get('semi-luxury'), beds: 2, maxGuests: 2, pricePerNight: 250, status: 'available', cleaningStatus: 'clean' },
+      { number: 4, type: 'semi-luxury', roomTypeId: byCode.get('semi-luxury'), beds: 3, maxGuests: 3, pricePerNight: 280, status: 'available', cleaningStatus: 'clean' },
+      { number: 5, type: 'economy', roomTypeId: byCode.get('economy'), beds: 2, maxGuests: 2, pricePerNight: 150, status: 'available', cleaningStatus: 'clean' },
+      { number: 6, type: 'economy', roomTypeId: byCode.get('economy'), beds: 4, maxGuests: 4, pricePerNight: 200, status: 'available', cleaningStatus: 'clean' },
+      { number: 7, type: 'economy', roomTypeId: byCode.get('economy'), beds: 3, maxGuests: 3, pricePerNight: 180, status: 'available', cleaningStatus: 'clean' },
+      { number: 8, type: 'luxury', roomTypeId: byCode.get('luxury'), beds: 2, maxGuests: 4, pricePerNight: 450, status: 'available', cleaningStatus: 'clean' },
     ]);
+  }
+
+  /**
+   * A few example guests so the "Новое бронирование" form has something
+   * pickable out of the box. Without this seed, FormSelect on guestId
+   * shows an empty dropdown and the screen looks broken to a fresh
+   * install — there's no obvious affordance to add a guest from the
+   * reservation flow. Skips if any guest already exists so re-runs
+   * stay idempotent and we don't pollute production data.
+   */
+  private async seedGuests() {
+    const repo = this.dataSource.getRepository(Guest);
+    const existingCount = await repo.count();
+    if (existingCount > 0) return;
+
+    await repo.save([
+      {
+        firstName: 'Иван',
+        lastName: 'Петров',
+        passportNumber: 'AB1234567',
+        phone: '+992 901 23-45-67',
+        email: 'ivan.petrov@example.com',
+        nationality: 'Россия',
+      },
+      {
+        firstName: 'Мария',
+        lastName: 'Сидорова',
+        passportNumber: 'CD7654321',
+        phone: '+992 902 34-56-78',
+        email: 'maria.sidorova@example.com',
+        nationality: 'Казахстан',
+      },
+      {
+        firstName: 'John',
+        lastName: 'Smith',
+        passportNumber: 'US123456',
+        phone: '+1 555 010-2030',
+        email: 'john.smith@example.com',
+        nationality: 'USA',
+      },
+    ]);
+    console.log('  Seeded 3 sample guests');
   }
 
   private async seedWarehouses() {

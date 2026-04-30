@@ -27,6 +27,12 @@ import { SyncModule } from './sync/sync.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { ManagerApprovalModule } from './auth/manager-approval.module';
 import { CleaningModule } from './cleaning/cleaning.module';
+import { StocktakeModule } from './stocktake/stocktake.module';
+import { AlertsModule } from './alerts/alerts.module';
+import { StockModule } from './stock/stock.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
+import { ImmutableLedgerSubscriber } from './common/subscribers/immutable-ledger.subscriber';
 import { SeedService } from './seed.service';
 
 @Module({
@@ -56,9 +62,15 @@ import { SeedService } from './seed.service';
     ShiftsModule,
     ManagerApprovalModule,
     CleaningModule,
+    StocktakeModule,
+    AlertsModule,
+    StockModule,
+    SuppliersModule,
+    MaintenanceModule,
   ],
   providers: [
     SeedService,
+    ImmutableLedgerSubscriber,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],

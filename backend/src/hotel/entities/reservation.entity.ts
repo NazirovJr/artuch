@@ -1,7 +1,18 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { Guest } from './guest.entity';
+import { BookingGroup } from './booking-group.entity';
 
 @Entity('reservations')
+@Index(['groupId'])
 export class Reservation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -39,6 +50,16 @@ export class Reservation {
 
   @Column({ nullable: true })
   folioId: string;
+
+  // FK to BookingGroup when this reservation is part of a multi-room
+  // group booking. When set, ensureFolioForReservation routes the room
+  // charge to the group's master folio instead of opening a personal one.
+  @Column({ nullable: true })
+  groupId: string;
+
+  @ManyToOne(() => BookingGroup, (g) => g.reservations, { nullable: true })
+  @JoinColumn({ name: 'groupId' })
+  group: BookingGroup;
 
   @Column({ type: 'timestamptz', nullable: true })
   actualCheckIn: Date;

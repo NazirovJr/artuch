@@ -56,6 +56,7 @@ export class RentalsController {
       condition: body.condition,
       damageNote: body.damageNote,
       damageFee: body.damageFee,
+      writeOffOnDamage: body.writeOffOnDamage,
     });
   }
 

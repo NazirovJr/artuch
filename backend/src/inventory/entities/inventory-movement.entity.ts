@@ -1,7 +1,27 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { InventoryItem } from './inventory-item.entity';
 
+export type InventoryMovementType =
+  | 'income'
+  | 'expense'
+  | 'sale'
+  | 'return' // legacy alias for return_customer
+  | 'return_customer'
+  | 'return_supplier'
+  | 'adjustment'
+  | 'writeoff';
+
 @Entity('inventory_movements')
+@Index(['itemId', 'createdAt'])
+@Index(['type', 'createdAt'])
 export class InventoryMovement {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -16,8 +36,8 @@ export class InventoryMovement {
   @Column({ length: 200 })
   itemName: string;
 
-  @Column({ length: 10 })
-  type: string;
+  @Column({ length: 20 })
+  type: InventoryMovementType;
 
   @Column()
   quantity: number;
@@ -27,6 +47,10 @@ export class InventoryMovement {
 
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   totalCost: number;
+
+  // Stock value AFTER applying this movement, for audit/replay purposes.
+  @Column({ nullable: true })
+  balanceAfter: number;
 
   @Column()
   employeeId: string;
@@ -39,6 +63,10 @@ export class InventoryMovement {
 
   @Column({ length: 200, nullable: true })
   supplier: string;
+
+  // Client-supplied UUID for safe retries over flaky mobile networks.
+  @Column({ type: 'uuid', nullable: true, unique: true })
+  idempotencyKey: string;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -7,8 +7,15 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Room } from './entities/room.entity';
+import { RoomType } from './entities/room-type.entity';
 import { Guest } from './entities/guest.entity';
 import { Reservation } from './entities/reservation.entity';
+import { BookingGroup } from './entities/booking-group.entity';
+import {
+  BulkCreateRoomsDto,
+  CreateRoomDto,
+  UpdateRoomDtoExtended,
+} from './dto/create-room.dto';
 import { EventsService } from '../events/events.service';
 import { FoliosService } from '../folios/folios.service';
 import { CleaningService } from '../cleaning/cleaning.service';
@@ -22,23 +29,173 @@ const ACTIVE_RESERVATION_STATUSES = ['pending', 'confirmed', 'checked-in'];
 export class HotelService {
   constructor(
     @InjectRepository(Room) private roomsRepo: Repository<Room>,
+    @InjectRepository(RoomType) private roomTypesRepo: Repository<RoomType>,
     @InjectRepository(Guest) private guestsRepo: Repository<Guest>,
-    @InjectRepository(Reservation) private reservationsRepo: Repository<Reservation>,
+    @InjectRepository(Reservation)
+    private reservationsRepo: Repository<Reservation>,
+    @InjectRepository(BookingGroup)
+    private bookingGroupsRepo: Repository<BookingGroup>,
     private eventsService: EventsService,
     private foliosService: FoliosService,
     private cleaningService: CleaningService,
     private outbound: OutboundMessageService,
   ) {}
 
-  // Rooms
+  // ─── Rooms ────────────────────────────────────────────────────
   async findAllRooms(): Promise<Room[]> {
-    return this.roomsRepo.find({ order: { number: 'ASC' } });
+    return this.roomsRepo.find({
+      order: { number: 'ASC' },
+      relations: ['roomType'],
+    });
   }
 
-  async updateRoom(number: number, data: Partial<Room>): Promise<Room> {
+  async findRoomByNumber(number: number): Promise<Room> {
+    const room = await this.roomsRepo.findOne({
+      where: { number },
+      relations: ['roomType'],
+    });
+    if (!room) throw new NotFoundException('Room not found');
+    return room;
+  }
+
+  /**
+   * Create a single room. If `roomTypeId` is set, missing spec fields
+   * (beds, maxGuests, pricePerNight, type-string) are inherited from the
+   * RoomType so the legacy v1 grid keeps rendering correctly.
+   */
+  async createRoom(data: CreateRoomDto): Promise<Room> {
+    const existing = await this.roomsRepo.findOne({
+      where: { number: data.number },
+    });
+    if (existing) {
+      throw new ConflictException(`Room ${data.number} already exists`);
+    }
+
+    let typeRow: RoomType | null = null;
+    if (data.roomTypeId) {
+      typeRow = await this.roomTypesRepo.findOne({
+        where: { id: data.roomTypeId },
+      });
+      if (!typeRow) {
+        throw new BadRequestException('roomTypeId does not exist');
+      }
+    }
+
+    const beds = data.beds ?? typeRow?.beds ?? 1;
+    const maxGuests = data.maxGuests ?? typeRow?.maxGuests ?? 2;
+    const pricePerNight =
+      data.pricePerNight ?? Number(typeRow?.basePrice) ?? 0;
+    const typeLabel = data.type ?? typeRow?.code ?? 'standard';
+
+    const room = this.roomsRepo.create({
+      number: data.number,
+      type: typeLabel,
+      roomTypeId: data.roomTypeId,
+      beds,
+      maxGuests,
+      pricePerNight,
+      floor: data.floor,
+      location: data.location,
+      notes: data.notes,
+      status: 'available',
+      cleaningStatus: 'clean',
+      isActive: true,
+    });
+    return this.roomsRepo.save(room);
+  }
+
+  /**
+   * Create N rooms of the same type in one shot. Either pass `numbers`
+   * (explicit list) or `from` + `count` (range, sequential). Skips
+   * existing numbers without erroring out — partial application is
+   * acceptable for bulk admin actions.
+   */
+  async bulkCreateRooms(data: BulkCreateRoomsDto): Promise<{
+    created: Room[];
+    skipped: number[];
+  }> {
+    const typeRow = await this.roomTypesRepo.findOne({
+      where: { id: data.roomTypeId },
+    });
+    if (!typeRow) {
+      throw new BadRequestException('roomTypeId does not exist');
+    }
+
+    let numbers: number[];
+    if (data.numbers && data.numbers.length > 0) {
+      numbers = data.numbers;
+    } else if (
+      typeof data.from === 'number' &&
+      typeof data.count === 'number'
+    ) {
+      numbers = Array.from(
+        { length: data.count },
+        (_, i) => data.from! + i,
+      );
+    } else {
+      throw new BadRequestException(
+        'Either `numbers` or both `from` and `count` are required',
+      );
+    }
+
+    const existing = await this.roomsRepo
+      .createQueryBuilder('r')
+      .where('r.number IN (:...nums)', { nums: numbers })
+      .getMany();
+    const existingSet = new Set(existing.map((r) => r.number));
+
+    const toCreate = numbers
+      .filter((n) => !existingSet.has(n))
+      .map((n) =>
+        this.roomsRepo.create({
+          number: n,
+          type: typeRow.code,
+          roomTypeId: typeRow.id,
+          beds: typeRow.beds,
+          maxGuests: typeRow.maxGuests,
+          pricePerNight: typeRow.basePrice,
+          floor: data.floor,
+          status: 'available',
+          cleaningStatus: 'clean',
+          isActive: true,
+        }),
+      );
+
+    const created = await this.roomsRepo.save(toCreate);
+    return {
+      created,
+      skipped: numbers.filter((n) => existingSet.has(n)),
+    };
+  }
+
+  async updateRoom(
+    number: number,
+    data: Partial<Room> | UpdateRoomDtoExtended,
+  ): Promise<Room> {
     const room = await this.roomsRepo.findOne({ where: { number } });
     if (!room) throw new NotFoundException('Room not found');
-    Object.assign(room, data);
+
+    // If switching room type, validate the FK and refresh denormalized
+    // fields that didn't get explicit DTO values. Keeps spec consistent.
+    const incoming = data as Partial<Room> & { roomTypeId?: string };
+    if (incoming.roomTypeId && incoming.roomTypeId !== room.roomTypeId) {
+      const typeRow = await this.roomTypesRepo.findOne({
+        where: { id: incoming.roomTypeId },
+      });
+      if (!typeRow) {
+        throw new BadRequestException('roomTypeId does not exist');
+      }
+      if (incoming.type === undefined) incoming.type = typeRow.code;
+      if (incoming.beds === undefined) incoming.beds = typeRow.beds;
+      if (incoming.maxGuests === undefined) {
+        incoming.maxGuests = typeRow.maxGuests;
+      }
+      if (incoming.pricePerNight === undefined) {
+        incoming.pricePerNight = typeRow.basePrice;
+      }
+    }
+
+    Object.assign(room, incoming);
     const saved = await this.roomsRepo.save(room);
     this.eventsService.emitRoomStatusChanged(
       saved.number,
@@ -48,7 +205,26 @@ export class HotelService {
     return saved;
   }
 
-  // Guests
+  /**
+   * Delete a room. Refuses if it has any non-cancelled reservations —
+   * losing booking history is unacceptable. Soft-deactivate via PATCH
+   * isActive=false is the way to retire a room while keeping the past.
+   */
+  async deleteRoom(number: number): Promise<void> {
+    const room = await this.roomsRepo.findOne({ where: { number } });
+    if (!room) throw new NotFoundException('Room not found');
+    const hasReservations = await this.reservationsRepo.count({
+      where: { roomNumber: number },
+    });
+    if (hasReservations > 0) {
+      throw new ConflictException(
+        `Room ${number} has ${hasReservations} reservation(s) on record. Deactivate instead of deleting.`,
+      );
+    }
+    await this.roomsRepo.delete({ number });
+  }
+
+  // ─── Guests ───────────────────────────────────────────────────
   async findAllGuests(): Promise<Guest[]> {
     return this.guestsRepo.find({ order: { createdAt: 'DESC' } });
   }
@@ -64,16 +240,14 @@ export class HotelService {
     return this.guestsRepo.save(guest);
   }
 
-  // Reservations
+  // ─── Reservations ────────────────────────────────────────────
   async findAllReservations(): Promise<Reservation[]> {
-    return this.reservationsRepo.find({ relations: ['guest'], order: { createdAt: 'DESC' } });
+    return this.reservationsRepo.find({
+      relations: ['guest', 'group'],
+      order: { createdAt: 'DESC' },
+    });
   }
 
-  /**
-   * Find reservations for a date range, optionally constrained to a single
-   * room. Used by the calendar/grid view to draw active bookings; only
-   * statuses that physically hold the room count.
-   */
   async findReservationsInRange(
     from: string,
     to: string,
@@ -92,10 +266,6 @@ export class HotelService {
     return qb.getMany();
   }
 
-  /**
-   * Lightweight precheck used by the staff app before submitting a new
-   * reservation — returns the conflicting reservations (empty list = OK).
-   */
   async findConflicts(
     roomNumber: number,
     checkInDate: string,
@@ -123,13 +293,14 @@ export class HotelService {
         'roomNumber, checkInDate and checkOutDate are required',
       );
     }
-    if (new Date(data.checkInDate as any) >= new Date(data.checkOutDate as any)) {
+    if (
+      new Date(data.checkInDate as any) >= new Date(data.checkOutDate as any)
+    ) {
       throw new BadRequestException(
         'checkOutDate must be later than checkInDate',
       );
     }
 
-    // Capacity check: number of guests must not exceed room capacity.
     const room = await this.roomsRepo.findOne({
       where: { number: data.roomNumber },
     });
@@ -141,8 +312,6 @@ export class HotelService {
       );
     }
 
-    // Overlap check: no other active reservation may intersect the requested dates.
-    // Two date intervals [a,b) and [c,d) overlap iff a < d AND c < b.
     const conflict = await this.reservationsRepo
       .createQueryBuilder('r')
       .where('r.roomNumber = :n', { n: data.roomNumber })
@@ -161,9 +330,6 @@ export class HotelService {
     const reservation = this.reservationsRepo.create(data);
     const saved = await this.reservationsRepo.save(reservation);
 
-    // If the reservation is created already in checked-in state, mark the room
-    // as occupied and open a folio. Otherwise leave the room as-is so the
-    // grid still reflects today's actual occupancy.
     if (saved.status === 'checked-in') {
       await this.roomsRepo.update(saved.roomNumber, {
         status: 'occupied',
@@ -172,7 +338,6 @@ export class HotelService {
       await this.ensureFolioForReservation(saved, actorUserId);
     }
 
-    // Confirmation email/SMS — best-effort, never blocks the booking flow.
     if (saved.guestId) {
       this.guestsRepo
         .findOne({ where: { id: saved.guestId } })
@@ -192,11 +357,6 @@ export class HotelService {
     return saved;
   }
 
-  /**
-   * Send a 24h-before-checkin reminder for every reservation that's about to
-   * start. Designed to be invoked by an external cron once a day; leaves
-   * already-sent state out for now and relies on idempotent delivery.
-   */
   async sendCheckInReminders(): Promise<{ sent: number }> {
     const now = new Date();
     const start = new Date(now);
@@ -237,14 +397,14 @@ export class HotelService {
     data: Partial<Reservation>,
     actorUserId?: string,
   ): Promise<Reservation> {
-    const reservation = await this.reservationsRepo.findOne({ where: { id } });
+    const reservation = await this.reservationsRepo.findOne({
+      where: { id },
+    });
     if (!reservation) throw new NotFoundException('Reservation not found');
     const previousStatus = reservation.status;
     Object.assign(reservation, data);
     const saved = await this.reservationsRepo.save(reservation);
 
-    // Auto-open a folio the first time a reservation enters check-in so all
-    // subsequent charges (POS, mini-bar, services) get tied to the guest.
     if (
       saved.status === 'checked-in' &&
       previousStatus !== 'checked-in' &&
@@ -265,8 +425,6 @@ export class HotelService {
         currentReservationId: null as any,
         cleaningStatus: 'needs-cleaning',
       });
-      // Open a structured departure-cleaning task for housekeeping. The legacy
-      // room.cleaningStatus flag stays in sync via CleaningService.approve().
       await this.cleaningService.create({
         roomNumber: reservation.roomNumber,
         type: 'departure',
@@ -282,6 +440,12 @@ export class HotelService {
    * by hand. Idempotent: if the reservation already has a folioId we skip
    * both steps; if the room charge was already written for this reservation
    * (same sourceId) we skip the charge so a double-PATCH doesn't duplicate.
+   *
+   * Group routing: when reservation.groupId is set AND the group is in
+   * routeAllToMaster mode, the room-stay charge lands on the group's
+   * master folio instead of opening a new per-room folio. The reservation
+   * still gets folioId pointed at the master so subsequent POS calls find
+   * the right bill.
    */
   private async ensureFolioForReservation(
     reservation: Reservation,
@@ -289,16 +453,43 @@ export class HotelService {
   ): Promise<void> {
     if (reservation.folioId) return;
 
-    const folio = await this.foliosService.create({
-      guestId: reservation.guestId,
-      reservationId: reservation.id,
-      roomNumber: reservation.roomNumber,
-    });
-    reservation.folioId = folio.id;
-    await this.reservationsRepo.update(reservation.id, { folioId: folio.id });
+    let folioId: string;
+    let chargesArr: any[] = [];
 
-    // Post the room stay as the first line on the folio. Description names
-    // the period + guest count so the printed bill reads naturally.
+    if (reservation.groupId) {
+      const group = await this.bookingGroupsRepo.findOne({
+        where: { id: reservation.groupId },
+      });
+      if (group?.routeAllToMaster && group.masterFolioId) {
+        const master = await this.foliosService.findById(group.masterFolioId);
+        folioId = master.id;
+        chargesArr = master.charges ?? [];
+      } else {
+        const folio = await this.foliosService.create({
+          guestId: reservation.guestId,
+          reservationId: reservation.id,
+          roomNumber: reservation.roomNumber,
+        });
+        folioId = folio.id;
+        chargesArr = (folio as any).charges ?? [];
+      }
+      // First member checks in → flip the group from pending to active.
+      if (group && group.status === 'pending') {
+        await this.bookingGroupsRepo.update(group.id, { status: 'active' });
+      }
+    } else {
+      const folio = await this.foliosService.create({
+        guestId: reservation.guestId,
+        reservationId: reservation.id,
+        roomNumber: reservation.roomNumber,
+      });
+      folioId = folio.id;
+      chargesArr = (folio as any).charges ?? [];
+    }
+
+    reservation.folioId = folioId;
+    await this.reservationsRepo.update(reservation.id, { folioId });
+
     const totalPrice = Number(reservation.totalPrice) || 0;
     if (totalPrice > 0) {
       const checkIn = new Date(reservation.checkInDate as any);
@@ -312,15 +503,11 @@ export class HotelService {
         `Проживание · номер ${reservation.roomNumber} · ` +
         `${nights} ноч. · ${guests} гостей · ${fmt(checkIn)}–${fmt(checkOut)}`;
 
-      // Guard against duplicate room-charge if ensureFolioForReservation
-      // somehow gets called twice on the same folio (shouldn't happen after
-      // the folioId check above, but cheap belt-and-suspenders).
-      const charges = (folio.charges || []) as any[];
-      const alreadyPosted = charges.some(
+      const alreadyPosted = chargesArr.some(
         (c) => c.chargeType === 'room' && c.sourceId === reservation.id,
       );
       if (!alreadyPosted) {
-        await this.foliosService.addCharge(folio.id, {
+        await this.foliosService.addCharge(folioId, {
           chargeType: 'room',
           description,
           amount: totalPrice,

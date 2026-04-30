@@ -23,8 +23,8 @@ export class CreateOrderDto {
   @IsString()
   waiterName: string;
 
-  @IsNumber()
-  tableNumber: number;
+  @IsString()
+  tableNumber: string;
 
   @IsNumber()
   total: number;

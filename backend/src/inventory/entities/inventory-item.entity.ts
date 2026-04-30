@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  VersionColumn,
+} from 'typeorm';
 
 @Entity('inventory_items')
 export class InventoryItem {
@@ -25,6 +32,12 @@ export class InventoryItem {
 
   @Column({ default: 0 })
   minStock: number;
+
+  @Column({ default: 0 })
+  parLevel: number;
+
+  @Column({ default: 0 })
+  reorderPoint: number;
 
   @Column({ length: 20 })
   unit: string;
@@ -59,6 +72,9 @@ export class InventoryItem {
 
   @Column({ default: 0 })
   rentedQuantity: number;
+
+  @VersionColumn()
+  version: number;
 
   @CreateDateColumn()
   createdAt: Date;

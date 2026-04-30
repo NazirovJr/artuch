@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { AbilityBuilder, PureAbility } from '@casl/ability';
+import {
+  AbilityBuilder,
+  createMongoAbility,
+  MongoAbility,
+} from '@casl/ability';
 import { RolesService } from '../roles/roles.service';
 
 export type Actions =
@@ -17,6 +21,10 @@ export type Subjects =
   | 'Guest'
   | 'WarehouseItem'
   | 'WarehouseTransaction'
+  | 'StockTransfer'
+  | 'Stocktake'
+  | 'StocktakeLine'
+  | 'LowStockAlert'
   | 'InventoryItem'
   | 'InventoryMovement'
   | 'User'
@@ -33,9 +41,31 @@ export type Subjects =
   | 'Shift'
   | 'CleaningTask'
   | 'OrderEditLog'
+  | 'Supplier'
+  | 'RoomType'
+  | 'BookingGroup'
   | 'all';
 
-export type AppAbility = PureAbility<[Actions, Subjects]>;
+// MongoAbility ships with a built-in MongoDB-query conditionsMatcher, which
+// every role in seed.service.ts uses (e.g. `conditions: { employeeId:
+// '${user.id}' }`). Without it, AbilityBuilder.build() throws "You need to
+// pass conditionsMatcher option" the moment a single conditional rule is
+// added — surfacing as a 500 on every authorised request from cashier /
+// waiter / barman, while owner (manage:all, no conditions) stays unaffected.
+export type AppAbility = MongoAbility<[Actions, Subjects]>;
+
+/**
+ * Some users were seeded with display-style role strings (e.g. 'shop-seller',
+ * 'bartender', 'warehouse') while permissions live under canonical names
+ * ('cashier', 'barman', 'warehouse-keeper'). New code should use canonical
+ * names everywhere; this map keeps existing JWTs working until accounts are
+ * re-seeded. Update both this map and seed.service.ts when adding roles.
+ */
+const ROLE_ALIASES: Record<string, string> = {
+  'shop-seller': 'cashier',
+  bartender: 'barman',
+  warehouse: 'warehouse-keeper',
+};
 
 @Injectable()
 export class CaslAbilityFactory {
@@ -45,33 +75,45 @@ export class CaslAbilityFactory {
     id: string;
     role: string;
   }): Promise<AppAbility> {
-    const { can, cannot, build } = new AbilityBuilder<AppAbility>(PureAbility);
+    const { can, cannot, build } = new AbilityBuilder<AppAbility>(
+      createMongoAbility,
+    );
 
-    try {
-      const permissions =
-        await this.rolesService.getPermissionsForRole(user.role);
+    const candidates = [user.role, ROLE_ALIASES[user.role]].filter(
+      Boolean,
+    ) as string[];
 
-      for (const perm of permissions) {
-        // Replace ${user.id} placeholders in conditions
-        let conditions = perm.conditions;
-        if (conditions) {
-          const condStr = JSON.stringify(conditions).replace(
-            /\$\{user\.id\}/g,
-            user.id,
-          );
-          conditions = JSON.parse(condStr);
+    for (const candidate of candidates) {
+      try {
+        const permissions =
+          await this.rolesService.getPermissionsForRole(candidate);
+
+        for (const perm of permissions) {
+          // Replace ${user.id} placeholders in conditions
+          let conditions = perm.conditions;
+          if (conditions) {
+            const condStr = JSON.stringify(conditions).replace(
+              /\$\{user\.id\}/g,
+              user.id,
+            );
+            conditions = JSON.parse(condStr);
+          }
+
+          if (perm.inverted) {
+            cannot(perm.action as Actions, perm.subject as Subjects);
+          } else if (conditions) {
+            can(perm.action as Actions, perm.subject as Subjects, conditions);
+          } else {
+            can(perm.action as Actions, perm.subject as Subjects);
+          }
         }
-
-        if (perm.inverted) {
-          cannot(perm.action as Actions, perm.subject as Subjects);
-        } else if (conditions) {
-          can(perm.action as Actions, perm.subject as Subjects, conditions);
-        } else {
-          can(perm.action as Actions, perm.subject as Subjects);
-        }
+        // First match wins — don't double-apply if both literal and alias
+        // resolve.
+        break;
+      } catch {
+        // Try the next candidate
+        continue;
       }
-    } catch {
-      // Role not found in DB — fallback: no permissions
     }
 
     return build();

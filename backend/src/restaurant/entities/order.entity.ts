@@ -15,8 +15,8 @@ export class Order {
   @Column({ length: 100, nullable: true })
   waiterName: string;
 
-  @Column()
-  tableNumber: number;
+  @Column({ length: 20 })
+  tableNumber: string;
 
   @Column({ length: 20, default: 'pending' })
   status: string;

@@ -1,25 +1,49 @@
-import { IsString, IsNumber, IsOptional, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsIn,
+  IsUUID,
+  Min,
+} from 'class-validator';
+
+export const INVENTORY_MOVEMENT_TYPES = [
+  'income',
+  'expense',
+  'sale',
+  'return', // legacy alias
+  'return_customer',
+  'return_supplier',
+  'adjustment',
+  'writeoff',
+] as const;
+
+export type InventoryMovementType = (typeof INVENTORY_MOVEMENT_TYPES)[number];
 
 export class CreateMovementDto {
-  @IsString()
+  @IsUUID()
   itemId: string;
 
+  @IsOptional()
   @IsString()
-  itemName: string;
+  itemName?: string;
 
   @IsString()
-  @IsIn(['income', 'expense', 'sale'])
-  type: string;
+  @IsIn(INVENTORY_MOVEMENT_TYPES as unknown as string[])
+  type: InventoryMovementType;
 
   @IsNumber()
+  @Min(0.01)
   quantity: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   price?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   totalCost?: number;
 
   @IsString()
@@ -35,4 +59,8 @@ export class CreateMovementDto {
   @IsOptional()
   @IsString()
   supplier?: string;
+
+  @IsOptional()
+  @IsUUID()
+  idempotencyKey?: string;
 }
