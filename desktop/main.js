@@ -3,7 +3,7 @@
 // Wraps the Expo web export (`web-build/`) in a desktop window. The bundle uses
 // absolute asset paths (`/_expo/...`), so file:// won't resolve them — instead
 // we serve `web-build/` over a loopback HTTP server and point the window at it.
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, session } = require('electron');
 const path = require('path');
 const http = require('http');
 const handler = require('serve-handler');
@@ -53,7 +53,32 @@ async function createWindow() {
   win.loadURL(`http://127.0.0.1:${port}`);
 }
 
-app.whenReady().then(createWindow);
+// The renderer loads from http://127.0.0.1:<random-port> — an origin the
+// backend's CORS allowlist doesn't include, so login/API responses get
+// blocked by Chromium ("fetch error"). Instead of disabling webSecurity,
+// inject permissive CORS headers onto responses. Safe here: the client
+// authenticates via Bearer tokens (no cookies / credentials:'include'),
+// so a wildcard origin is acceptable.
+function enableCorsHeaderInjection() {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = {};
+    for (const [key, value] of Object.entries(details.responseHeaders || {})) {
+      // Drop any existing CORS headers (case-insensitive) to avoid duplicates.
+      if (!/^access-control-allow-(origin|methods|headers)$/i.test(key)) {
+        responseHeaders[key] = value;
+      }
+    }
+    responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+    responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, PUT, PATCH, DELETE, OPTIONS'];
+    responseHeaders['Access-Control-Allow-Headers'] = ['Content-Type, Authorization, X-Requested-With'];
+    callback({ responseHeaders });
+  });
+}
+
+app.whenReady().then(() => {
+  enableCorsHeaderInjection();
+  createWindow();
+});
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
