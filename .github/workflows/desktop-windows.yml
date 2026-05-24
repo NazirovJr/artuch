@@ -5,15 +5,21 @@ name: Desktop (Windows .exe)
 # Run manually from the Actions tab; the .exe lands in the run's Artifacts.
 
 on:
+  # Manual run from the Actions tab (lets you override the API URL).
   workflow_dispatch:
     inputs:
       apiUrl:
         description: "Backend API base URL baked into the build (no trailing /api)"
         required: true
         default: "https://artuch.org"
+  # Auto-run on push to master so a build appears without any extra clicks.
   push:
-    tags:
-      - "desktop-v*"
+    branches:
+      - master
+    paths:
+      - "desktop/**"
+      - "staff-app/**"
+      - ".github/workflows/desktop-windows.yml"
 
 jobs:
   build-windows:
