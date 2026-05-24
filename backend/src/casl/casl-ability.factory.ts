@@ -44,6 +44,11 @@ export type Subjects =
   | 'Supplier'
   | 'RoomType'
   | 'BookingGroup'
+  | 'Check'
+  | 'Expense'
+  | 'ExpenseCategory'
+  | 'Income'
+  | 'IncomeCategory'
   | 'all';
 
 // MongoAbility ships with a built-in MongoDB-query conditionsMatcher, which

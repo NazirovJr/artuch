@@ -18,6 +18,10 @@ export interface HotelInfo {
   website?: string;
   /** Optional tax ID / ИНН for fiscal receipts. */
   taxId?: string;
+  /** URL or base64 data URI of the hotel logo for PDF documents. */
+  logoUrl?: string;
+  /** ISO 4217 currency code, e.g. "TJS", "USD". */
+  currency?: string;
 }
 
 export const HOTEL_INFO: HotelInfo = {

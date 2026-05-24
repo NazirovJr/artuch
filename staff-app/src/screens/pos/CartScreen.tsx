@@ -74,6 +74,7 @@ export default function CartScreen({ navigation }: Props) {
         outletId: currentOutlet?.id || null,
         ...(isFolioMode ? { folioId: selectedFolioId } : {}),
         items: cart.map((item) => ({
+          itemId: item.id,
           name: item.name,
           price: item.price,
           quantity: item.quantity,
@@ -169,7 +170,7 @@ export default function CartScreen({ navigation }: Props) {
       />
 
       {cart.length > 0 && (
-        <View style={styles.footer}>
+        <View style={[styles.footer, { borderTopColor: theme.colors.outlineVariant }]}>
           {/* Subtotal */}
           <View style={styles.totalRow}>
             <Text variant="titleMedium">Итого:</Text>
@@ -249,7 +250,6 @@ const styles = StyleSheet.create({
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
   },
   totalRow: {
     flexDirection: 'row',

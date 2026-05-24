@@ -31,6 +31,10 @@ export interface BlockTarget {
 export interface BlockSpec {
   title: string;
   value?: string | number;
+  /** When set, the tile animates a count-up to this number. */
+  numericValue?: number;
+  /** Formats the animated number (money/int). */
+  format?: (n: number) => string;
   subtitle?: string;
   icon?: string;
   size?: BentoSize;
@@ -50,17 +54,21 @@ const fmtMoney = (n: number) => `${Math.round(n).toLocaleString('ru-RU')} TJS`;
 
 const revenueBlock = (kpi: Kpi | null): BlockSpec => ({
   title: 'Выручка сегодня',
-  value: kpi ? fmtMoney(kpi.todayRevenue) : '—',
+  value: kpi ? undefined : '—',
+  numericValue: kpi ? kpi.todayRevenue : undefined,
+  format: fmtMoney,
   subtitle: 'Все смены, без возвратов',
   icon: 'cash-multiple',
   size: 'wide',
-  tone: 'primary',
+  tone: 'gradient',
   target: { drawer: 'AdminDrawer', screen: 'Revenue' },
 });
 
 const activeOrdersBlock = (kpi: Kpi | null): BlockSpec => ({
   title: 'Активные заказы',
-  value: kpi?.activeOrders ?? '—',
+  value: kpi ? undefined : '—',
+  numericValue: kpi ? kpi.activeOrders : undefined,
+  format: (n) => String(Math.round(n)),
   subtitle: 'В работе или ожидании',
   icon: 'food-fork-drink',
   size: 'sm',
@@ -82,7 +90,9 @@ const occupancyBlock = (kpi: Kpi | null): BlockSpec => ({
 
 const reservationsBlock = (kpi: Kpi | null): BlockSpec => ({
   title: 'Брони ожидают',
-  value: kpi?.pendingReservations ?? '—',
+  value: kpi ? undefined : '—',
+  numericValue: kpi ? kpi.pendingReservations : undefined,
+  format: (n) => String(Math.round(n)),
   subtitle: 'Подтверждение / заезд',
   icon: 'calendar-check',
   size: 'sm',
@@ -118,19 +128,57 @@ export function getBlocksFor(role: string, kpi: Kpi | null): BlockSection[] {
         {
           title: 'Быстрый доступ',
           blocks: [
+            shortcut('Финансы', 'finance', 'AdminDrawer', 'Finance', 'md'),
+            // Recording/managing expenses & income is owner/admin only —
+            // managers see the P&L via Finance but don't enter these.
+            ...(role !== 'manager'
+              ? [
+                  shortcut('Затраты', 'cash-minus', 'AdminDrawer', 'ExpenseList', 'md'),
+                  shortcut('Доходы', 'cash-plus', 'AdminDrawer', 'IncomeList', 'md'),
+                ]
+              : []),
             shortcut('Аналитика', 'chart-line', 'AdminDrawer', 'Dashboard', 'md'),
             shortcut('Сотрудники', 'account-group', 'AdminDrawer', 'StaffList', 'md'),
             shortcut('Типы комнат', 'bed', 'AdminDrawer', 'RoomTypeList', 'md'),
             shortcut('Комнаты', 'door', 'AdminDrawer', 'RoomManagement', 'md'),
+            shortcut('Меню', 'silverware-fork-knife', 'AdminDrawer', 'MenuManagement', 'md'),
+            ...(role !== 'manager'
+              ? [
+                  shortcut('Категории затрат', 'tag-multiple', 'AdminDrawer', 'ExpenseCategories'),
+                  shortcut('Категории доходов', 'tag-plus', 'AdminDrawer', 'IncomeCategories'),
+                ]
+              : []),
+            shortcut('Точки продаж', 'store', 'AdminDrawer', 'OutletManagement'),
             shortcut('Аудит', 'clipboard-list', 'AdminDrawer', 'AuditLog'),
             shortcut('Исключения', 'alert-octagon', 'AdminDrawer', 'Exceptions'),
+            ...(role !== 'manager'
+              ? [shortcut('Настройки', 'cog', 'AdminDrawer', 'AdminSettings')]
+              : []),
           ],
         },
       ];
 
     case 'cashier':
+      return [
+        {
+          title: 'Касса',
+          blocks: [
+            shortcut('Открыть смену', 'cash-register', 'POSDrawer', 'ShiftOpen', 'wide'),
+            shortcut('Продажа', 'point-of-sale', 'POSDrawer', 'POS', 'md'),
+            shortcut('История', 'receipt', 'POSDrawer', 'TransactionHistory', 'md'),
+            shortcut('Возврат', 'cash-refund', 'POSDrawer', 'Refund'),
+          ],
+        },
+      ];
+
     case 'barman':
       return [
+        {
+          title: 'Бар',
+          blocks: [
+            shortcut('Бар (КДС)', 'glass-cocktail', 'BarDrawer', undefined, 'wide'),
+          ],
+        },
         {
           title: 'Касса',
           blocks: [
@@ -148,8 +196,7 @@ export function getBlocksFor(role: string, kpi: Kpi | null): BlockSection[] {
           title: 'Зал',
           blocks: [
             { ...activeOrdersBlock(kpi), size: 'wide', tone: 'primary' },
-            shortcut('Новый заказ', 'plus-box', 'OrdersDrawer', 'NewOrder', 'md'),
-            shortcut('Все заказы', 'format-list-bulleted', 'OrdersDrawer', 'OrderList', 'md'),
+            shortcut('Столы', 'table-furniture', 'OrdersDrawer', 'CheckList', 'md'),
           ],
         },
       ];

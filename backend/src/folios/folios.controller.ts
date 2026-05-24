@@ -56,7 +56,7 @@ export class FoliosController {
   @Audit('add-charge', 'Folio')
   addCharge(
     @Param('id') id: string,
-    @Body() body: { chargeType: string; description: string; amount: number; sourceId?: string },
+    @Body() body: { chargeType: string; description: string; amount: number; sourceId?: string; quantity?: number; unitPrice?: number },
     @Req() req: any,
   ) {
     return this.foliosService.addCharge(id, { ...body, addedBy: req.user.id });

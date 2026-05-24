@@ -22,6 +22,9 @@ export class Folio {
   @Column({ type: 'int', nullable: true })
   roomNumber: number;
 
+  @Column({ type: 'int', generated: 'increment' })
+  invoiceNumber: number;
+
   @Column({ length: 20, default: 'open' })
   status: string; // 'open' | 'closed'
 

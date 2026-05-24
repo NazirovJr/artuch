@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, FlatList, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Card, Text, Button, Badge, Divider, useTheme } from 'react-native-paper';
+import { Card, Text, Button, Divider, useTheme } from 'react-native-paper';
 import { getFolio, closeFolio } from '../../api/folios';
+import StatusBadge from '../../components/ui/StatusBadge';
+import { semantic } from '../../theme/colors';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RoomsStackParamList } from '../../navigation/types';
 
@@ -124,14 +126,7 @@ export default function FolioDetailScreen({ route, navigation, folioIdOverride }
             <Text variant="headlineSmall" style={{ fontWeight: 'bold' }}>
               Фолио #{folio.id?.slice(0, 8)}
             </Text>
-            <Badge
-              style={[
-                styles.statusBadge,
-                { backgroundColor: isOpen ? '#10B981' : '#9CA3AF' },
-              ]}
-            >
-              {isOpen ? 'Открыт' : 'Закрыт'}
-            </Badge>
+            <StatusBadge status={folio.status} domain="folio" />
           </View>
         </Card.Content>
       </Card>
@@ -182,7 +177,7 @@ export default function FolioDetailScreen({ route, navigation, folioIdOverride }
           </View>
           <View style={styles.infoRow}>
             <Text variant="bodyMedium">Оплачено</Text>
-            <Text variant="bodyMedium" style={{ fontWeight: 'bold', color: '#10B981' }}>
+            <Text variant="bodyMedium" style={{ fontWeight: 'bold', color: semantic.success }}>
               {paidAmount.toFixed(2)} TJS
             </Text>
           </View>
@@ -191,7 +186,7 @@ export default function FolioDetailScreen({ route, navigation, folioIdOverride }
             <Text variant="titleMedium">К оплате</Text>
             <Text
               variant="titleMedium"
-              style={{ fontWeight: 'bold', color: balance > 0 ? '#EF4444' : '#10B981' }}
+              style={{ fontWeight: 'bold', color: balance > 0 ? semantic.error : semantic.success }}
             >
               {balance.toFixed(2)} TJS
             </Text>
@@ -230,7 +225,7 @@ export default function FolioDetailScreen({ route, navigation, folioIdOverride }
                         variant="bodyMedium"
                         style={{
                           fontWeight: 'bold',
-                          color: isPositive ? '#10B981' : '#EF4444',
+                          color: isPositive ? semantic.success : semantic.error,
                         }}
                       >
                         {isPositive ? '+' : ''}{amt.toFixed(2)}
@@ -260,7 +255,7 @@ export default function FolioDetailScreen({ route, navigation, folioIdOverride }
             mode="contained"
             icon="cash"
             onPress={() => navigation.navigate('AddCharge', { folioId, mode: 'payment' })}
-            style={[styles.actionButton, { backgroundColor: '#10B981' }]}
+            style={[styles.actionButton, { backgroundColor: semantic.success }]}
           >
             Оплатить
           </Button>
@@ -285,30 +280,37 @@ export default function FolioDetailScreen({ route, navigation, folioIdOverride }
 
           <Button
             mode="outlined"
+            icon="file-document-outline"
+            onPress={() => navigation.navigate('FolioReceipt', { folioId })}
+            style={styles.actionButton}
+          >
+            Накладная / Чек
+          </Button>
+
+          <Button
+            mode="outlined"
             icon="lock"
             onPress={handleClose}
             loading={closing}
             disabled={closing}
             style={styles.actionButton}
-            textColor="#EF4444"
+            textColor={semantic.error}
           >
             Закрыть фолио
           </Button>
         </View>
       )}
 
-      {/* Closed folios get a single action: re-open the printed receipt.
-          The receipt is still useful after checkout — guests ask for
-          copies, accounting reconciles, etc. */}
+      {/* Closed folios: receipt + invoice */}
       {!isOpen && (
         <View style={styles.actionsContainer}>
           <Button
             mode="contained"
-            icon="receipt"
+            icon="file-document-outline"
             onPress={() => navigation.navigate('FolioReceipt', { folioId })}
             style={styles.actionButton}
           >
-            Показать чек
+            Накладная / Чек
           </Button>
         </View>
       )}
@@ -324,11 +326,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  statusBadge: {
-    color: '#fff',
-    paddingHorizontal: 8,
-    fontSize: 12,
   },
   infoRow: {
     flexDirection: 'row',

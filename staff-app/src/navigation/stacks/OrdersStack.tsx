@@ -1,9 +1,10 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from 'react-native-paper';
-import OrdersScreen from '../../screens/orders/OrdersScreen';
-import NewOrderScreen from '../../screens/orders/NewOrderScreen';
-import OrderDetailScreen from '../../screens/orders/OrderDetailScreen';
+import CheckListScreen from '../../screens/checks/CheckListScreen';
+import CheckDetailScreen from '../../screens/checks/CheckDetailScreen';
+import AddRoundScreen from '../../screens/checks/AddRoundScreen';
+import SettlementScreen from '../../screens/checks/SettlementScreen';
 import DrawerToggleButton from '../DrawerToggleButton';
 import { getHeaderStyle } from '../../theme';
 import type { OrdersStackParamList } from '../types';
@@ -15,16 +16,13 @@ export default function OrdersStack() {
   return (
     <Stack.Navigator screenOptions={getHeaderStyle(theme)}>
       <Stack.Screen
-        name="OrderList"
-        component={OrdersScreen}
-        options={{ title: 'Заказы', headerLeft: () => <DrawerToggleButton /> }}
+        name="CheckList"
+        component={CheckListScreen}
+        options={{ title: 'Столы', headerLeft: () => <DrawerToggleButton /> }}
       />
-      <Stack.Screen name="NewOrder" component={NewOrderScreen} options={{ title: 'Новый заказ' }} />
-      <Stack.Screen
-        name="OrderDetail"
-        component={OrderDetailScreen}
-        options={{ title: 'Детали заказа' }}
-      />
+      <Stack.Screen name="CheckDetail" component={CheckDetailScreen} options={{ title: 'Счёт' }} />
+      <Stack.Screen name="AddRound" component={AddRoundScreen} options={{ title: 'Новый заказ' }} />
+      <Stack.Screen name="Settlement" component={SettlementScreen} options={{ title: 'Оплата' }} />
     </Stack.Navigator>
   );
 }

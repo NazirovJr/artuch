@@ -9,6 +9,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RoomsStackParamList } from '../../navigation/types';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { FormNumberInput, FormTextInput } from '../../components/form';
+import { semanticSoft } from '../../theme/colors';
 import {
   newFolioSchema,
   type NewFolioForm,
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
   sectionLabel: { marginBottom: 8, opacity: 0.7 },
   searchInput: { marginBottom: 12 },
   button: { marginTop: 8, borderRadius: 8 },
-  selectedCard: { marginBottom: 16, borderRadius: 8, backgroundColor: '#E8F5E9' },
+  selectedCard: { marginBottom: 16, borderRadius: 8, backgroundColor: semanticSoft.success.bg },
   guestList: { marginBottom: 16 },
   guestCard: { marginBottom: 4, borderRadius: 8 },
   guestCardContent: { paddingVertical: 4 },

@@ -16,11 +16,12 @@ export type POSStackParamList = {
   ShiftClose: { shiftId: string };
 };
 
-// ── Orders ──────────────────────────────────────────────────────
+// ── Orders / table checks ───────────────────────────────────────
 export type OrdersStackParamList = {
-  OrderList: undefined;
-  NewOrder: undefined;
-  OrderDetail: { orderId: string };
+  CheckList: undefined;
+  CheckDetail: { checkId: string };
+  AddRound: { checkId: string; tableNumber: string };
+  Settlement: { checkId: string };
 };
 
 // ── Rooms (reception + reservations + folios + guests) ──────────
@@ -49,12 +50,26 @@ export type RoomsStackParamList = {
   BookingGroupStatement: { groupId: string };
 };
 
+// ── Bar ─────────────────────────────────────────────────────────
+export type BarStackParamList = {
+  Bar: undefined;           // existing KDS screen
+  BarHome: undefined;       // new hub
+  BarSale: undefined;       // direct sale (own POS, no redirect)
+  BarReceive: undefined;    // warehouse → bar transfer
+  BarChecks: undefined;     // bar checks list
+  BarCheckDetail: { checkId: string };
+  BarAddRound: { checkId: string; tableNumber: string };
+  BarQuickAdd: { checkId: string };
+  BarSettlement: { checkId: string };
+};
+
 // ── Cleaning ────────────────────────────────────────────────────
 export type CleaningStackParamList = {
   CleaningList: undefined;
   CleaningDetail: { roomNumber: number };
   CleaningTaskDetail: { taskId: string };
   CleaningInspection: { taskId: string };
+  CleaningRequest: undefined;
 };
 
 // ── Warehouse + Rentals ─────────────────────────────────────────
@@ -96,6 +111,7 @@ export type AdminStackParamList = {
   RoleList: undefined;
   OutletManagement: undefined;
   AuditLog: undefined;
+  Finance: undefined;
   Revenue: undefined;
   TopItems: undefined;
   EmployeeStats: undefined;
@@ -105,6 +121,18 @@ export type AdminStackParamList = {
   RoomTypeForm: { roomTypeId?: string };
   RoomForm: { roomTypeId?: string };
   RoomManagement: undefined;
+  MenuManagement: undefined;
+  MenuItemForm: { itemId?: string };
+  ExpenseList: undefined;
+  ExpenseForm: undefined;
+  ExpenseCategories: undefined;
+  ExpenseCategoryForm: { categoryId?: string };
+  IncomeList: undefined;
+  IncomeForm: undefined;
+  IncomeCategories: undefined;
+  IncomeCategoryForm: { categoryId?: string };
+  InventoryItems: undefined;
+  AdminSettings: undefined;
 };
 
 // ── Root (auth gate) ────────────────────────────────────────────
@@ -119,6 +147,7 @@ export type DrawerParamList = {
   POSDrawer: undefined;
   OrdersDrawer: undefined;
   KitchenDrawer: undefined;
+  BarDrawer: undefined;
   RoomsDrawer: undefined;
   CleaningDrawer: undefined;
   WarehouseDrawer: undefined;

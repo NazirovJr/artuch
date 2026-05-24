@@ -1,39 +1,60 @@
 /**
- * Typography tokens — Material 3 Expressive type scale.
+ * Typography tokens — "Mountain Dawn" type system.
  *
- * Uses system font today; will swap to Roboto Flex variable font in Phase 1.
- * Variant names match Paper's MD3 type variants so we can pass overrides
- * straight into the theme without renaming.
+ * Two families (loaded in App.tsx via registerAppFont):
+ *   - Onest      → UI / body / labels / titles  (sans)
+ *   - Unbounded  → display, headlines, KPI numbers (expressive display)
+ *
+ * In React Native each weight is a SEPARATE family name (fontWeight doesn't
+ * combine with custom fonts on iOS), so we map each MD3 variant to the exact
+ * weighted family. `fontWeight` is kept for web/system fallback.
+ *
+ * Variant names match Paper's MD3 type variants so overrides pass straight
+ * into the theme without renaming.
  */
 
-const FONT_FAMILY_REGULAR = 'System';
-const FONT_FAMILY_MEDIUM = 'System';
+// Sans (Onest) weights
+const SANS = 'Onest';
+const SANS_MEDIUM = 'Onest-Medium';
+const SANS_SEMIBOLD = 'Onest-SemiBold';
+// Display (Unbounded) weights
+const DISPLAY = 'Unbounded-Bold';
+const DISPLAY_SEMI = 'Unbounded-SemiBold';
 
 /**
- * MD3 Expressive type scale.
+ * MD3 type scale, sized per the Mountain Dawn spec.
  * Display = hero numbers / KPI; Headline = section titles;
  * Title = card headers; Body = paragraph text; Label = chips / buttons.
  */
 export const typeScale = {
-  displayLarge: { fontFamily: FONT_FAMILY_REGULAR, fontSize: 57, lineHeight: 64, fontWeight: '400' as const, letterSpacing: -0.25 },
-  displayMedium: { fontFamily: FONT_FAMILY_REGULAR, fontSize: 45, lineHeight: 52, fontWeight: '400' as const, letterSpacing: 0 },
-  displaySmall: { fontFamily: FONT_FAMILY_REGULAR, fontSize: 36, lineHeight: 44, fontWeight: '400' as const, letterSpacing: 0 },
+  displayLarge: { fontFamily: DISPLAY, fontSize: 52, lineHeight: 56, fontWeight: '700' as const, letterSpacing: -0.5 },
+  displayMedium: { fontFamily: DISPLAY, fontSize: 44, lineHeight: 48, fontWeight: '700' as const, letterSpacing: -0.5 },
+  displaySmall: { fontFamily: DISPLAY, fontSize: 34, lineHeight: 40, fontWeight: '700' as const, letterSpacing: -0.25 },
 
-  headlineLarge: { fontFamily: FONT_FAMILY_REGULAR, fontSize: 32, lineHeight: 40, fontWeight: '600' as const, letterSpacing: 0 },
-  headlineMedium: { fontFamily: FONT_FAMILY_REGULAR, fontSize: 28, lineHeight: 36, fontWeight: '600' as const, letterSpacing: 0 },
-  headlineSmall: { fontFamily: FONT_FAMILY_REGULAR, fontSize: 24, lineHeight: 32, fontWeight: '600' as const, letterSpacing: 0 },
+  headlineLarge: { fontFamily: DISPLAY_SEMI, fontSize: 30, lineHeight: 38, fontWeight: '600' as const, letterSpacing: -0.25 },
+  headlineMedium: { fontFamily: DISPLAY_SEMI, fontSize: 24, lineHeight: 30, fontWeight: '600' as const, letterSpacing: -0.15 },
+  headlineSmall: { fontFamily: SANS_SEMIBOLD, fontSize: 20, lineHeight: 26, fontWeight: '600' as const, letterSpacing: -0.1 },
 
-  titleLarge: { fontFamily: FONT_FAMILY_MEDIUM, fontSize: 22, lineHeight: 28, fontWeight: '600' as const, letterSpacing: 0 },
-  titleMedium: { fontFamily: FONT_FAMILY_MEDIUM, fontSize: 16, lineHeight: 24, fontWeight: '600' as const, letterSpacing: 0.15 },
-  titleSmall: { fontFamily: FONT_FAMILY_MEDIUM, fontSize: 14, lineHeight: 20, fontWeight: '600' as const, letterSpacing: 0.1 },
+  titleLarge: { fontFamily: SANS_SEMIBOLD, fontSize: 18, lineHeight: 24, fontWeight: '600' as const, letterSpacing: 0 },
+  titleMedium: { fontFamily: SANS_SEMIBOLD, fontSize: 16, lineHeight: 22, fontWeight: '600' as const, letterSpacing: 0 },
+  titleSmall: { fontFamily: SANS_SEMIBOLD, fontSize: 14, lineHeight: 20, fontWeight: '600' as const, letterSpacing: 0.1 },
 
-  bodyLarge: { fontFamily: FONT_FAMILY_REGULAR, fontSize: 16, lineHeight: 24, fontWeight: '400' as const, letterSpacing: 0.5 },
-  bodyMedium: { fontFamily: FONT_FAMILY_REGULAR, fontSize: 14, lineHeight: 20, fontWeight: '400' as const, letterSpacing: 0.25 },
-  bodySmall: { fontFamily: FONT_FAMILY_REGULAR, fontSize: 12, lineHeight: 16, fontWeight: '400' as const, letterSpacing: 0.4 },
+  bodyLarge: { fontFamily: SANS, fontSize: 16, lineHeight: 24, fontWeight: '400' as const, letterSpacing: 0.15 },
+  bodyMedium: { fontFamily: SANS, fontSize: 14, lineHeight: 21, fontWeight: '400' as const, letterSpacing: 0.15 },
+  bodySmall: { fontFamily: SANS, fontSize: 12, lineHeight: 17, fontWeight: '400' as const, letterSpacing: 0.2 },
 
-  labelLarge: { fontFamily: FONT_FAMILY_MEDIUM, fontSize: 14, lineHeight: 20, fontWeight: '600' as const, letterSpacing: 0.1 },
-  labelMedium: { fontFamily: FONT_FAMILY_MEDIUM, fontSize: 12, lineHeight: 16, fontWeight: '600' as const, letterSpacing: 0.5 },
-  labelSmall: { fontFamily: FONT_FAMILY_MEDIUM, fontSize: 11, lineHeight: 16, fontWeight: '600' as const, letterSpacing: 0.5 },
+  labelLarge: { fontFamily: SANS_SEMIBOLD, fontSize: 14, lineHeight: 20, fontWeight: '600' as const, letterSpacing: 0.1 },
+  labelMedium: { fontFamily: SANS_MEDIUM, fontSize: 12, lineHeight: 16, fontWeight: '500' as const, letterSpacing: 0.4 },
+  labelSmall: { fontFamily: SANS_MEDIUM, fontSize: 11, lineHeight: 16, fontWeight: '500' as const, letterSpacing: 0.6 },
+} as const;
+
+/** Font family constants for ad-hoc use (e.g. tabular KPI numbers). */
+export const fontFamilies = {
+  sans: SANS,
+  sansMedium: SANS_MEDIUM,
+  sansSemibold: SANS_SEMIBOLD,
+  display: DISPLAY,
+  displaySemi: DISPLAY_SEMI,
 } as const;
 
 export type TypographyVariant = keyof typeof typeScale;

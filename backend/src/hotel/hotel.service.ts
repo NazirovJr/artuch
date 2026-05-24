@@ -18,7 +18,6 @@ import {
 } from './dto/create-room.dto';
 import { EventsService } from '../events/events.service';
 import { FoliosService } from '../folios/folios.service';
-import { CleaningService } from '../cleaning/cleaning.service';
 import { OutboundMessageService } from '../notifications/outbound-message.service';
 
 // Reservation statuses that physically occupy the room and therefore conflict
@@ -37,7 +36,6 @@ export class HotelService {
     private bookingGroupsRepo: Repository<BookingGroup>,
     private eventsService: EventsService,
     private foliosService: FoliosService,
-    private cleaningService: CleaningService,
     private outbound: OutboundMessageService,
   ) {}
 
@@ -420,15 +418,13 @@ export class HotelService {
       });
     }
     if (data.status === 'checked-out' || data.status === 'cancelled') {
+      // Mark the room dirty so it surfaces in the room grid, but don't auto-
+      // create a cleaning task — housekeeping requests are raised manually by
+      // admin/owner/manager.
       await this.roomsRepo.update(reservation.roomNumber, {
         status: 'available',
         currentReservationId: null as any,
         cleaningStatus: 'needs-cleaning',
-      });
-      await this.cleaningService.create({
-        roomNumber: reservation.roomNumber,
-        type: 'departure',
-        reservationId: reservation.id,
       });
     }
     return saved;

@@ -27,7 +27,14 @@ export class PoliciesGuard implements CanActivate {
       return false;
     }
 
-    const ability = await this.caslAbilityFactory.createForUser(user);
+    // The JWT payload exposes the user id as `sub` (jwt.strategy), but row-level
+    // CASL conditions are written as `${user.id}`. Normalise so the factory
+    // substitutes the real id — otherwise conditions resolve to "undefined" and
+    // match nothing (which silently disabled every conditional rule).
+    const ability = await this.caslAbilityFactory.createForUser({
+      id: user.id || user.sub,
+      role: user.role,
+    });
 
     // Attach ability to request for use in controllers/services
     request.ability = ability;

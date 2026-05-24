@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, FlatList, StyleSheet, RefreshControl } from 'react-native';
 import { Card, Text, Chip, Button, Badge, useTheme, IconButton } from 'react-native-paper';
 import Animated, { FadeInUp } from 'react-native-reanimated';
-import { getInventory } from '../../api/inventory';
+import { useFocusEffect } from '@react-navigation/native';
+import { getInventoryItems as getInventory } from '../../api/inventory';
 import { usePosStore } from '../../store/posStore';
 import { useAuthStore } from '../../store/authStore';
 import { useShiftStore } from '../../store/shiftStore';
@@ -51,10 +52,14 @@ export default function POSScreen({ navigation }: Props) {
     }
   }, [toast]);
 
-  useEffect(() => {
-    refreshShift();
-    fetchInventory();
-  }, [fetchInventory, refreshShift]);
+  // Refresh inventory + shift every time the screen comes into focus so that
+  // stock counts are up-to-date after a completed sale or a receive-from-warehouse.
+  useFocusEffect(
+    useCallback(() => {
+      refreshShift();
+      fetchInventory();
+    }, [fetchInventory, refreshShift]),
+  );
 
   const categories = useMemo(() => {
     const cats = new Set<string>();

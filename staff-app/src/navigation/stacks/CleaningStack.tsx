@@ -6,6 +6,7 @@ import CleaningScreen from '../../screens/cleaning/CleaningScreen';
 import CleaningDetailScreen from '../../screens/cleaning/CleaningDetailScreen';
 import CleaningTaskDetailScreen from '../../screens/cleaning/CleaningTaskDetailScreen';
 import CleaningInspectionScreen from '../../screens/cleaning/CleaningInspectionScreen';
+import CleaningRequestFormScreen from '../../screens/cleaning/CleaningRequestFormScreen';
 import { getHeaderStyle } from '../../theme';
 import type { CleaningStackParamList } from '../types';
 
@@ -34,6 +35,11 @@ export default function CleaningStack() {
         name="CleaningInspection"
         component={CleaningInspectionScreen}
         options={{ title: 'Инспекция уборки' }}
+      />
+      <Stack.Screen
+        name="CleaningRequest"
+        component={CleaningRequestFormScreen}
+        options={{ title: 'Новая заявка на уборку' }}
       />
     </Stack.Navigator>
   );

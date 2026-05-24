@@ -13,10 +13,14 @@ export const radius = {
   sm: 8,
   /** 12 — cards, list items (default for surfaces) */
   md: 12,
-  /** 16 — bento blocks, prominent cards */
+  /** 16 — prominent cards */
   lg: 16,
+  /** 20 — bento KPI tiles */
+  bento: 20,
   /** 24 — sheets, dialogs, FABs */
   xl: 24,
+  /** 32 — hero cards, large sheets */
+  xxl: 32,
   /** 999 — pill / circular (avatars, status pills) */
   full: 999,
 } as const;

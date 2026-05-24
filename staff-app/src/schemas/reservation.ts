@@ -7,7 +7,11 @@ import { dateSchema, guestCount, optionalText, positiveInt } from './common';
 export const newReservationSchema = z
   .object({
     guestId: z.string({ error: 'Выберите гостя' }).min(1, 'Выберите гостя'),
-    roomNumber: positiveInt,
+    // FormSelect stores values as strings; coerce to number before validating.
+    roomNumber: z.preprocess(
+      (v) => (v !== undefined && v !== '' ? Number(v) : undefined),
+      positiveInt,
+    ),
     checkInDate: dateSchema,
     checkOutDate: dateSchema,
     numberOfGuests: guestCount,

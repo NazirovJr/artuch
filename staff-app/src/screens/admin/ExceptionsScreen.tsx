@@ -5,6 +5,7 @@ import {
   getExceptionsSummary,
   ExceptionsSummary,
 } from '../../api/exceptions';
+import { semantic } from '../../theme/colors';
 
 /**
  * Owner-oriented dashboard. Aggregates the four most common loss-prevention
@@ -116,7 +117,7 @@ export default function ExceptionsScreen() {
                       styles.amount,
                       {
                         color:
-                          v.variance < 0 ? '#EF4444' : '#10B981',
+                          v.variance < 0 ? semantic.error : semantic.success,
                       },
                     ]}
                   >

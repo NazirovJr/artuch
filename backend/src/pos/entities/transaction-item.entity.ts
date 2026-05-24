@@ -13,6 +13,12 @@ export class TransactionItem {
   @Column()
   transactionId: string;
 
+  // The inventory item this line was sold from. Nullable for legacy rows and
+  // for non-stock lines (services / ad-hoc items). Preferred over `name` for
+  // stock deduction and refund restock — names are not a stable key.
+  @Column({ nullable: true })
+  itemId: string;
+
   @Column({ length: 200 })
   name: string;
 

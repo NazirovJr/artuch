@@ -9,6 +9,20 @@ export const semantic = {
   neutral: '#9CA3AF',
 } as const;
 
+/**
+ * Soft tonal pairs (background + ink) for status badges/pills — Mountain Dawn.
+ * Light-theme oriented; dark theme overrides come from `theme.brand.tokens`.
+ * Use for chip/badge fills where a saturated dot/border would be too loud.
+ */
+export const semanticSoft = {
+  success: { bg: '#D9EBDF', fg: '#2F6E48' },
+  warning: { bg: '#FBE5C6', fg: '#8A5512' },
+  error: { bg: '#F4D7D2', fg: '#8E3329' },
+  info: { bg: '#D6E1EE', fg: '#2C4E73' },
+  neutral: { bg: '#F1EADC', fg: '#4A5567' },
+  accent: { bg: '#FAE6C5', fg: '#6A4012' },
+} as const;
+
 export const orderStatusColors: Record<string, string> = {
   pending: semantic.warning,
   preparing: semantic.info,
@@ -133,6 +147,21 @@ export const roleColors: Record<string, string> = {
   'warehouse-keeper': '#8B5CF6',
   cashier: '#F97316',
   barman: '#06B6D4',
+};
+
+/** RU role labels — single source (drawer header, home greeting, staff list). */
+export const roleLabels: Record<string, string> = {
+  owner: 'Владелец',
+  admin: 'Администратор',
+  manager: 'Менеджер',
+  cashier: 'Кассир',
+  barman: 'Бармен',
+  waiter: 'Официант',
+  cook: 'Повар',
+  reception: 'Ресепшн',
+  cleaning: 'Горничная',
+  'warehouse-keeper': 'Кладовщик',
+  'rental-operator': 'Прокат',
 };
 
 /** All status color maps indexed by domain */

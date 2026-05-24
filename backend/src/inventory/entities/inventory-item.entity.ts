@@ -64,6 +64,9 @@ export class InventoryItem {
   @Column({ nullable: true })
   warehouseId: string;
 
+  @Column({ nullable: true })
+  warehouseItemId: string;
+
   @Column({ default: false })
   isRentable: boolean;
 

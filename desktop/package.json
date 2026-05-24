@@ -1,0 +1,47 @@
+{
+  "name": "artuch-staff-desktop",
+  "version": "1.0.0",
+  "description": "Artuch Staff — Windows desktop shell (Electron wrapper around the Expo web build)",
+  "main": "main.js",
+  "author": "Artuch Travel",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win --publish never"
+  },
+  "dependencies": {
+    "serve-handler": "^6.1.6"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "org.artuch.staff",
+    "productName": "Artuch Staff",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "web-build/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "artifactName": "ArtuchStaff-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Artuch Staff"
+    }
+  }
+}

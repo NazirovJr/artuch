@@ -50,8 +50,27 @@ export class RestaurantService {
     return this.menuRepo.find({ where: { isActive: true }, order: { category: 'ASC', name: 'ASC' } });
   }
 
-  async findAllOrders(status?: string): Promise<Order[]> {
-    const where: any = {};
+  /** Admin view: includes inactive items so they can be re-enabled / edited. */
+  async findAllMenuItemsAdmin(): Promise<MenuItem[]> {
+    return this.menuRepo.find({ order: { category: 'ASC', name: 'ASC' } });
+  }
+
+  async createMenuItem(data: Partial<MenuItem>): Promise<MenuItem> {
+    return this.menuRepo.save(this.menuRepo.create(data));
+  }
+
+  async updateMenuItem(id: string, data: Partial<MenuItem>): Promise<MenuItem> {
+    const item = await this.menuRepo.findOne({ where: { id } });
+    if (!item) throw new NotFoundException('Menu item not found');
+    Object.assign(item, data);
+    return this.menuRepo.save(item);
+  }
+
+  async findAllOrders(
+    status?: string,
+    scope: Record<string, any> = {},
+  ): Promise<Order[]> {
+    const where: any = { ...scope };
     if (status) where.status = status;
     return this.ordersRepo.find({ where, order: { createdAt: 'DESC' }, relations: ['items'] });
   }

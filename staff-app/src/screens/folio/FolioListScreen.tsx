@@ -7,6 +7,7 @@ import type { RoomsStackParamList } from '../../navigation/types';
 import StatusBadge from '../../components/ui/StatusBadge';
 import EmptyState from '../../components/ui/EmptyState';
 import { useToast } from '../../components/ui/Toast';
+import { semantic } from '../../theme/colors';
 
 type Props = NativeStackScreenProps<RoomsStackParamList, 'FolioList'> & {
   /** Master-detail mode: tap calls this instead of navigating to FolioDetail. */
@@ -101,7 +102,7 @@ export default function FolioListScreen({ navigation, onSelectFolio, selectedFol
             <Text variant="bodyMedium" style={styles.label}>Баланс:</Text>
             <Text
               variant="bodyMedium"
-              style={{ color: balance > 0 ? '#EF4444' : '#10B981', fontWeight: 'bold' }}
+              style={{ color: balance > 0 ? semantic.error : semantic.success, fontWeight: 'bold' }}
             >
               {balance.toFixed(2)} TJS
             </Text>

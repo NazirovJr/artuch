@@ -3,11 +3,12 @@ import { View, FlatList, RefreshControl, StyleSheet } from 'react-native';
 import { Card, Text, Chip, useTheme } from 'react-native-paper';
 import { getOwnerFeed, OwnerFeedItem } from '../../api/exceptions';
 import { useSocketEvent } from '../../socket/useSocketEvent';
+import { semantic } from '../../theme/colors';
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#EF4444',
-  warning: '#F59E0B',
-  info: '#3B82F6',
+  critical: semantic.error,
+  warning: semantic.warning,
+  info: semantic.info,
 };
 
 interface RiskyAction {

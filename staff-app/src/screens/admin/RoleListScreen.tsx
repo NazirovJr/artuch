@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, FlatList, RefreshControl, StyleSheet } from 'react-native';
 import { Card, Text, Badge, List, useTheme } from 'react-native-paper';
 import { getRoles } from '../../api/roles';
+import { roleColors } from '../../theme/colors';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AdminStackParamList } from '../../navigation/types';
 
@@ -64,7 +65,7 @@ export default function RoleListScreen({ navigation }: Props) {
           </View>
 
           {isExpanded && permissions.length > 0 && (
-            <View style={styles.permissionsContainer}>
+            <View style={[styles.permissionsContainer, { borderTopColor: theme.colors.outlineVariant }]}>
               <Text variant="labelSmall" style={styles.permissionsTitle}>
                 Разрешения:
               </Text>
@@ -79,7 +80,7 @@ export default function RoleListScreen({ navigation }: Props) {
           )}
 
           {isExpanded && permissions.length === 0 && (
-            <View style={styles.permissionsContainer}>
+            <View style={[styles.permissionsContainer, { borderTopColor: theme.colors.outlineVariant }]}>
               <Text variant="bodySmall" style={{ opacity: 0.5 }}>
                 Нет данных о разрешениях
               </Text>
@@ -131,7 +132,7 @@ const styles = StyleSheet.create({
   },
   roleName: { fontWeight: 'bold' },
   systemBadge: {
-    backgroundColor: '#6366F1',
+    backgroundColor: roleColors.manager,
     color: '#fff',
     paddingHorizontal: 6,
     fontSize: 10,
@@ -141,7 +142,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
   },
   permissionsTitle: {
     fontWeight: 'bold',

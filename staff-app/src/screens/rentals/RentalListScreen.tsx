@@ -9,6 +9,7 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import EmptyState from '../../components/ui/EmptyState';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import { useToast } from '../../components/ui/Toast';
+import { semantic } from '../../theme/colors';
 
 type Props = NativeStackScreenProps<WarehouseStackParamList, 'RentalList'>;
 
@@ -93,7 +94,7 @@ export default function RentalListScreen({ navigation }: Props) {
           <Text variant="bodyMedium" style={styles.label}>Возврат до:</Text>
           <Text
             variant="bodyMedium"
-            style={isOverdue(item) ? { color: '#EF4444', fontWeight: 'bold' } : undefined}
+            style={isOverdue(item) ? { color: semantic.error, fontWeight: 'bold' } : undefined}
           >
             {new Date(item.expectedReturn).toLocaleDateString('ru-RU')}
           </Text>

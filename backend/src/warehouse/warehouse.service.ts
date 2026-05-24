@@ -6,6 +6,7 @@ import {
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AlertsService } from '../alerts/alerts.service';
+import { mirrorIdempotencyKey } from '../common/deterministic-uuid';
 import { LotsService } from '../stock/lots.service';
 import { StockMovementType } from '../stock/entities/stock-movement.entity';
 import { StockService } from '../stock/stock.service';
@@ -128,9 +129,7 @@ export class WarehouseService {
           supplierId: data.supplierId,
           notes: data.notes,
           performedBy: data.performedBy,
-          idempotencyKey: data.idempotencyKey
-            ? `${data.idempotencyKey}:wh-mirror`
-            : undefined,
+          idempotencyKey: mirrorIdempotencyKey(data.idempotencyKey, 'wh-mirror'),
         },
         mgr,
       );
@@ -162,9 +161,10 @@ export class WarehouseService {
             performedBy: data.performedBy,
             notes: data.notes,
             counterparty: data.recipient,
-            idempotencyKey: data.idempotencyKey
-              ? `${data.idempotencyKey}:wh-mirror`
-              : undefined,
+            idempotencyKey: mirrorIdempotencyKey(
+              data.idempotencyKey,
+              'wh-mirror',
+            ),
           },
           mgr,
         );
@@ -172,7 +172,29 @@ export class WarehouseService {
       }
     }
 
-    // 3. Plain decrement / receipt / adjustment.
+    // 3a. Adjustment is an absolute SET in the legacy table (item.quantity =
+    // qty), so the unified side must SET to the same absolute too — not add it
+    // as a delta. Route through setExact, recorded as an 'adjustment' movement.
+    if (stockType === 'adjustment') {
+      await this.stockService.setExact(
+        {
+          source: 'warehouse',
+          itemId: item.id,
+          itemName: item.name,
+          locationId,
+          locationKind: 'warehouse',
+          newQuantity: qty,
+          performedBy: data.performedBy,
+          notes: data.notes,
+          movementType: 'adjustment',
+          idempotencyKey: mirrorIdempotencyKey(data.idempotencyKey, 'wh-mirror'),
+        },
+        mgr,
+      );
+      return;
+    }
+
+    // 3b. Plain decrement / receipt.
     await this.stockService.apply(
       {
         source: 'warehouse',
@@ -186,9 +208,7 @@ export class WarehouseService {
         notes: data.notes,
         counterparty: data.supplier ?? data.recipient,
         totalCost: data.totalCost,
-        idempotencyKey: data.idempotencyKey
-          ? `${data.idempotencyKey}:wh-mirror`
-          : undefined,
+        idempotencyKey: mirrorIdempotencyKey(data.idempotencyKey, 'wh-mirror'),
       },
       mgr,
     );
@@ -500,9 +520,10 @@ export class WarehouseService {
         quantity: qty,
         performedBy: data.performedBy,
         notes: data.notes,
-        idempotencyKey: data.idempotencyKey
-          ? `${data.idempotencyKey}:legacy-transfer`
-          : undefined,
+        idempotencyKey: mirrorIdempotencyKey(
+          data.idempotencyKey,
+          'legacy-transfer',
+        ),
       },
       mgr,
     );

@@ -4,7 +4,7 @@ import { Card, Text, Button, Divider, TextInput, useTheme } from 'react-native-p
 import { getRooms, updateRoom } from '../../api/rooms';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { CleaningStackParamList } from '../../navigation/types';
-import { cleaningStatusColors, cleaningStatusLabels, cleaningNextStatus } from '../../theme/colors';
+import { cleaningStatusColors, cleaningStatusLabels, cleaningNextStatus, semantic } from '../../theme/colors';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { useToast } from '../../components/ui/Toast';
 
@@ -87,7 +87,7 @@ export default function CleaningDetailScreen({ route, navigation }: Props) {
     );
   }
 
-  const statusColor = cleaningStatusColors[room.cleaningStatus] || '#9CA3AF';
+  const statusColor = cleaningStatusColors[room.cleaningStatus] || semantic.neutral;
   const statusLabel = cleaningStatusLabels[room.cleaningStatus] || room.cleaningStatus;
   const actionLabel = NEXT_ACTION_LABELS[room.cleaningStatus] || 'Обновить';
   const actionIcon = NEXT_ACTION_ICONS[room.cleaningStatus] || 'update';
@@ -164,7 +164,7 @@ export default function CleaningDetailScreen({ route, navigation }: Props) {
         style={styles.actionButton}
         contentStyle={styles.actionButtonContent}
         buttonColor={
-          room.cleaningStatus === 'clean' ? '#EF4444' : theme.colors.primary
+          room.cleaningStatus === 'clean' ? semantic.error : theme.colors.primary
         }
       >
         {actionLabel}

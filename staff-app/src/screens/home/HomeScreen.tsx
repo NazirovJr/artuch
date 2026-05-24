@@ -18,6 +18,8 @@ import { useAuthStore } from '../../store/authStore';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { getKpi } from '../../api/analytics';
 import { spacing } from '../../theme/spacing';
+import { radius } from '../../theme/shape';
+import { roleColors, roleLabels } from '../../theme/colors';
 import { contentMaxWidth } from '../../theme/breakpoints';
 import { BentoSection } from '../../components/bento/BentoGrid';
 import BentoCard from '../../components/bento/BentoCard';
@@ -50,8 +52,17 @@ export default function HomeScreen() {
   }, [loadKpi]);
 
   const role = user?.role || 'unknown';
-  const greeting = greetingForHour(new Date().getHours());
+  const now = new Date();
+  const greeting = greetingForHour(now.getHours());
   const sections = getBlocksFor(role, kpi);
+  const initials = (user?.fullName || '?').trim().charAt(0).toUpperCase();
+  const roleLabel = roleLabels[role] || role;
+  const dateLabel = now.toLocaleDateString('ru-RU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+  const avatarColor = roleColors[role] || theme.colors.primary;
 
   const handleBlockPress = useCallback(
     (spec: BlockSpec) => {
@@ -78,14 +89,26 @@ export default function HomeScreen() {
           already <= 1400dp), tablet/desktop/web get a comfortable max width
           so bento cards don't sprawl across a 1920px monitor. */}
       <View style={[styles.inner, { maxWidth: contentMaxWidth.grid }]}>
-        {/* Greeting header */}
+        {/* Greeting header — avatar + name + role + date */}
         <View style={styles.greeting}>
-          <Text variant="titleMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            {greeting},
-          </Text>
-          <Text variant="headlineMedium" style={{ color: theme.colors.onSurface, fontWeight: '700' }}>
-            {user?.fullName || ''}
-          </Text>
+          <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+          <View style={styles.greetingText}>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              {greeting},
+            </Text>
+            <Text
+              variant="headlineMedium"
+              style={{ color: theme.colors.onSurface }}
+              numberOfLines={1}
+            >
+              {user?.fullName || ''}
+            </Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+              {roleLabel} · {dateLabel}
+            </Text>
+          </View>
         </View>
 
         {sections.map((section, sIdx) => (
@@ -95,6 +118,8 @@ export default function HomeScreen() {
                 key={block.title}
                 title={block.title}
                 value={block.value}
+                numericValue={block.numericValue}
+                format={block.format}
                 subtitle={block.subtitle}
                 icon={block.icon}
                 size={block.size}
@@ -130,7 +155,26 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   greeting: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.xl,
+  },
+  greetingText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '700',
   },
 });

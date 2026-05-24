@@ -5,7 +5,17 @@ import RootNavigator from './src/navigation/RootNavigator';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 import { ToastProvider } from './src/components/ui/Toast';
 import { LanguageProvider } from './src/i18n';
-import { useAppFonts } from './src/hooks/useAppFonts';
+import { useAppFonts, registerAppFont } from './src/hooks/useAppFonts';
+import {
+  Onest_400Regular,
+  Onest_500Medium,
+  Onest_600SemiBold,
+  Onest_700Bold,
+} from '@expo-google-fonts/onest';
+import {
+  Unbounded_600SemiBold,
+  Unbounded_700Bold,
+} from '@expo-google-fonts/unbounded';
 import { installWebAlertPolyfill } from './src/utils/webAlertPolyfill';
 import {
   getBaseUrl,
@@ -27,16 +37,18 @@ import './src/schemas/setup';
 // On iOS/Android this call is a no-op.
 installWebAlertPolyfill();
 
-// Register optional assets here — see assets/fonts/README.md and
-// assets/sounds/README.md for the exact snippets. Without registration
-// both subsystems gracefully no-op (system font + silent chime).
-//
-// Example:
-//   import { registerAppFont } from './src/hooks/useAppFonts';
-//   registerAppFont('RobotoFlex', require('@expo-google-fonts/roboto-flex/RobotoFlex_400Regular.ttf'));
-//
-//   import { registerKitchenSound } from './src/hooks/useKitchenSound';
-//   registerKitchenSound(require('./assets/sounds/new-order.mp3'));
+// ── Mountain Dawn typography ────────────────────────────────────
+// Onest (sans, body/UI) + Unbounded (display, headlines & KPI numbers).
+// Each weight is a distinct RN family; typography.ts maps variants onto these.
+registerAppFont('Onest', Onest_400Regular);
+registerAppFont('Onest-Medium', Onest_500Medium);
+registerAppFont('Onest-SemiBold', Onest_600SemiBold);
+registerAppFont('Onest-Bold', Onest_700Bold);
+registerAppFont('Unbounded-SemiBold', Unbounded_600SemiBold);
+registerAppFont('Unbounded-Bold', Unbounded_700Bold);
+
+// Other optional assets (kitchen sound, etc.) register the same way — see
+// assets/fonts/README.md and assets/sounds/README.md.
 
 // Wire the outbox bridge once at module load — apiFetch consults this to
 // queue mutations on transport failure, and an attempt is made to drain

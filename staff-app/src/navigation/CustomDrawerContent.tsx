@@ -5,28 +5,19 @@ import {
   DrawerItemList,
   type DrawerContentComponentProps,
 } from '@react-navigation/drawer';
-import { Text, Button, Divider, useTheme } from 'react-native-paper';
+import { Text, Button, Divider } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
 import { DrawerActions } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
 import { logout } from '../api/auth';
 import { onPrimaryOverlay } from '../theme/palette';
+import { roleLabels } from '../theme/colors';
+import { useAppTheme } from '../hooks/useAppTheme';
 import { useHaptics } from '../hooks/useHaptics';
-
-const ROLE_LABELS: Record<string, string> = {
-  admin: 'Администратор',
-  manager: 'Менеджер',
-  cashier: 'Кассир',
-  barman: 'Бармен',
-  waiter: 'Официант',
-  cook: 'Повар',
-  reception: 'Ресепшн',
-  cleaning: 'Горничная',
-  'warehouse-keeper': 'Кладовщик',
-};
 
 export default function CustomDrawerContent(props: DrawerContentComponentProps) {
   const { user, reset } = useAuthStore();
-  const theme = useTheme();
+  const theme = useAppTheme();
   const haptics = useHaptics();
 
   const handleLogout = async () => {
@@ -35,7 +26,8 @@ export default function CustomDrawerContent(props: DrawerContentComponentProps) 
     reset();
   };
 
-  const roleLabel = ROLE_LABELS[user?.role || ''] || user?.role || '';
+  const roleLabel = roleLabels[user?.role || ''] || user?.role || '';
+  const gradientNight = theme.brand.tokens.gradientNight as string[];
 
   const openProfile = () => {
     haptics.light();
@@ -49,20 +41,26 @@ export default function CustomDrawerContent(props: DrawerContentComponentProps) 
     <View style={styles.container}>
       <Pressable
         onPress={openProfile}
-        style={[styles.header, { backgroundColor: theme.colors.primary }]}
         android_ripple={{ color: onPrimaryOverlay.soft }}
       >
-        <View style={[styles.avatar, { backgroundColor: onPrimaryOverlay.soft }]}>
-          <Text style={[styles.avatarText, { color: theme.colors.onPrimary }]}>
-            {(user?.fullName || '?').charAt(0).toUpperCase()}
+        <LinearGradient
+          colors={gradientNight as [string, string, ...string[]]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
+          <View style={[styles.avatar, { backgroundColor: onPrimaryOverlay.soft }]}>
+            <Text style={[styles.avatarText, { color: '#FFFFFF' }]}>
+              {(user?.fullName || '?').charAt(0).toUpperCase()}
+            </Text>
+          </View>
+          <Text variant="titleMedium" style={[styles.name, { color: '#FFFFFF' }]}>
+            {user?.fullName}
           </Text>
-        </View>
-        <Text variant="titleMedium" style={[styles.name, { color: theme.colors.onPrimary }]}>
-          {user?.fullName}
-        </Text>
-        <Text variant="bodySmall" style={[styles.role, { color: onPrimaryOverlay.text }]}>
-          {roleLabel}
-        </Text>
+          <Text variant="bodySmall" style={[styles.role, { color: onPrimaryOverlay.text }]}>
+            {roleLabel}
+          </Text>
+        </LinearGradient>
       </Pressable>
       <Divider />
 

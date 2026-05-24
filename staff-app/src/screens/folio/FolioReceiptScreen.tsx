@@ -28,15 +28,18 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Button, SegmentedButtons, Text } from 'react-native-paper';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RoomsStackParamList } from '../../navigation/types';
 import { getFolio, emailFolioReceipt } from '../../api/folios';
 import { getGuest } from '../../api/guests';
+import { getSettings, type SystemSettings } from '../../api/settings';
 import { renderFolioReceiptHtml } from '../../utils/folioReceiptHtml';
+import { renderFolioInvoiceHtml, buildInvoiceLines } from '../../utils/folioInvoiceHtml';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { useToast } from '../../components/ui/Toast';
 import { useHaptics } from '../../hooks/useHaptics';
+import { useAuthStore } from '../../store/authStore';
 
 type Props = NativeStackScreenProps<RoomsStackParamList, 'FolioReceipt'>;
 
@@ -79,27 +82,40 @@ export default function FolioReceiptScreen({ route, navigation }: Props) {
   const theme = useAppTheme();
   const toast = useToast();
   const haptics = useHaptics();
+  const user = useAuthStore((s) => s.user);
 
   const [folio, setFolio] = useState<any>(null);
   const [guest, setGuest] = useState<any>(null);
+  const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [mode, setMode] = useState<'receipt' | 'invoice'>('receipt');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const folioData = await getFolio(folioId);
-      setFolio(folioData);
-      if (folioData?.guestId) {
+      const [folioData, settingsData] = await Promise.allSettled([
+        getFolio(folioId),
+        getSettings(),
+      ]);
+      const resolvedFolio = folioData.status === 'fulfilled' ? folioData.value : null;
+      setFolio(resolvedFolio);
+      if (settingsData.status === 'fulfilled') {
+        setSettings(settingsData.value);
+      }
+      if (resolvedFolio?.guestId) {
         // Separate call (not joined on the backend) — cheap and keeps the
         // folio endpoint focused. A missing guest is non-fatal.
         try {
-          const g = await getGuest(folioData.guestId);
+          const g = await getGuest(resolvedFolio.guestId);
           setGuest(g);
         } catch {
           setGuest(null);
         }
+      }
+      if (folioData.status === 'rejected') {
+        toast.error('Не удалось загрузить фолио', (folioData.reason as any)?.message);
       }
     } catch (e: any) {
       toast.error('Не удалось загрузить фолио', e?.message);
@@ -112,7 +128,7 @@ export default function FolioReceiptScreen({ route, navigation }: Props) {
     load();
   }, [load]);
 
-  const html = useMemo(() => {
+  const receiptHtml = useMemo(() => {
     if (!folio) return '';
     return renderFolioReceiptHtml({
       folio,
@@ -124,6 +140,41 @@ export default function FolioReceiptScreen({ route, navigation }: Props) {
       reservation: folio.reservation ?? null,
     });
   }, [folio, guest]);
+
+  const invoiceHtml = useMemo(() => {
+    if (!folio) return '';
+    const invoiceLines = buildInvoiceLines(
+      folio.charges ?? [],
+      { roomNumber: folio.roomNumber, openedAt: folio.openedAt, closedAt: folio.closedAt },
+    );
+    return renderFolioInvoiceHtml({
+      folio: {
+        invoiceNumber: folio.invoiceNumber,
+        roomNumber: folio.roomNumber,
+        openedAt: folio.openedAt,
+        closedAt: folio.closedAt,
+        totalAmount: folio.totalAmount,
+        paidAmount: folio.paidAmount,
+      },
+      guest: guest ? {
+        firstName: guest.firstName,
+        lastName: guest.lastName,
+        nationality: guest.nationality,
+      } : undefined,
+      lines: invoiceLines,
+      administrator: user?.fullName,
+      hotel: settings ? {
+        name: settings.hotelName ?? undefined,
+        address: settings.hotelAddress ?? undefined,
+        phone: settings.hotelPhone ?? undefined,
+        email: settings.hotelEmail ?? undefined,
+        logoUrl: settings.logoUrl ?? undefined,
+        currency: settings.currency ?? undefined,
+      } : undefined,
+    });
+  }, [folio, guest, settings, user]);
+
+  const html = mode === 'invoice' ? invoiceHtml : receiptHtml;
 
   const handlePrint = async () => {
     if (!html) return;
@@ -171,9 +222,13 @@ export default function FolioReceiptScreen({ route, navigation }: Props) {
     }
     setSending(true);
     try {
+      const subject =
+        mode === 'invoice'
+          ? `Счет № ${folio?.invoiceNumber ?? ''} — ${Number(folio?.totalAmount ?? 0).toFixed(2)} TJS`
+          : `Чек по фолио — ${Number(folio?.totalAmount ?? 0).toFixed(2)} TJS`;
       const res = await emailFolioReceipt(folioId, {
         html,
-        subject: `Чек по фолио — ${Number(folio?.totalAmount ?? 0).toFixed(2)} TJS`,
+        subject,
       });
       haptics.success();
       toast.success('Чек отправлен', res?.to || guest.email);
@@ -214,6 +269,17 @@ export default function FolioReceiptScreen({ route, navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={styles.modeToggle}>
+        <SegmentedButtons
+          value={mode}
+          onValueChange={(v) => setMode(v as 'receipt' | 'invoice')}
+          buttons={[
+            { value: 'receipt', label: 'Квитанция', icon: 'receipt' },
+            { value: 'invoice', label: 'Накладная (Счёт)', icon: 'file-document-outline' },
+          ]}
+          density="small"
+        />
+      </View>
       <View style={styles.webviewWrapper}>
         <ReceiptPreview html={html} />
       </View>
@@ -298,6 +364,7 @@ function ReceiptPreview({ html }: { html: string }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  modeToggle: { padding: 10, paddingBottom: 4 },
   webviewWrapper: { flex: 1, backgroundColor: '#FFFFFF' },
   fallback: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   actions: {

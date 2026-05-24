@@ -19,6 +19,7 @@ import {
   type CleaningChecklistTemplate,
 } from '../../api/cleaning';
 import { useToast } from '../../components/ui/Toast';
+import { semantic } from '../../theme/colors';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { CleaningStackParamList } from '../../navigation/types';
 
@@ -161,9 +162,9 @@ export default function CleaningInspectionScreen({ route, navigation }: Props) {
                     }
                     color={
                       checklist[item.key]
-                        ? '#10B981'
+                        ? semantic.success
                         : item.required
-                        ? '#EF4444'
+                        ? semantic.error
                         : theme.colors.outline
                     }
                   />
@@ -210,7 +211,7 @@ export default function CleaningInspectionScreen({ route, navigation }: Props) {
                 onPress={handleReject}
                 loading={busy}
                 disabled={busy || !rejectNotes.trim()}
-                buttonColor="#EF4444"
+                buttonColor={semantic.error}
               >
                 Вернуть
               </Button>
@@ -227,7 +228,7 @@ export default function CleaningInspectionScreen({ route, navigation }: Props) {
             disabled={busy}
             style={styles.actionButton}
             icon="close"
-            textColor="#EF4444"
+            textColor={semantic.error}
           >
             Вернуть
           </Button>
@@ -238,7 +239,7 @@ export default function CleaningInspectionScreen({ route, navigation }: Props) {
             disabled={busy}
             style={styles.actionButton}
             icon="check"
-            buttonColor="#10B981"
+            buttonColor={semantic.success}
           >
             Принять
           </Button>

@@ -9,6 +9,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { getRental, extendRental } from '../../api/rentals';
+import { semantic } from '../../theme/colors';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WarehouseStackParamList } from '../../navigation/types';
 import StatusBadge from '../../components/ui/StatusBadge';
@@ -144,7 +145,7 @@ export default function RentalDetailScreen({ route, navigation }: Props) {
             <Text variant="bodyMedium" style={styles.label}>Возврат до</Text>
             <Text
               variant="bodyMedium"
-              style={isOverdue ? { color: '#EF4444', fontWeight: 'bold' } : undefined}
+              style={isOverdue ? { color: semantic.error, fontWeight: 'bold' } : undefined}
             >
               {new Date(rental.expectedReturn).toLocaleDateString('ru-RU')}
             </Text>
@@ -207,7 +208,7 @@ export default function RentalDetailScreen({ route, navigation }: Props) {
             {rental.damageFee != null && Number(rental.damageFee) > 0 && (
               <View style={styles.infoRow}>
                 <Text variant="bodyMedium" style={styles.label}>Штраф</Text>
-                <Text variant="bodyMedium" style={{ color: '#EF4444' }}>
+                <Text variant="bodyMedium" style={{ color: semantic.error }}>
                   {Number(rental.damageFee).toFixed(2)} TJS
                 </Text>
               </View>

@@ -1,0 +1,56 @@
+name: Desktop (Windows .exe)
+
+# Builds the Windows desktop app: exports the Expo web bundle, wraps it in
+# Electron, and packages an NSIS installer + portable .exe via electron-builder.
+# Run manually from the Actions tab; the .exe lands in the run's Artifacts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apiUrl:
+        description: "Backend API base URL baked into the build (no trailing /api)"
+        required: true
+        default: "https://artuch.org"
+  push:
+    tags:
+      - "desktop-v*"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install staff-app deps
+        working-directory: staff-app
+        run: npm install --no-audit --no-fund
+
+      - name: Export Expo web bundle
+        working-directory: staff-app
+        env:
+          EXPO_PUBLIC_API_URL: ${{ github.event.inputs.apiUrl || 'https://artuch.org' }}
+        run: npx expo export --platform web --output-dir ../desktop/web-build
+
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Build Windows installer + portable
+        working-directory: desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:win
+
+      - name: Upload .exe artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArtuchStaff-Windows
+          path: |
+            desktop/dist/*.exe
+          if-no-files-found: error

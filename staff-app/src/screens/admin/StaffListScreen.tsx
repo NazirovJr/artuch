@@ -17,6 +17,7 @@ import type { AdminStackParamList } from '../../navigation/types';
 import StatusBadge from '../../components/ui/StatusBadge';
 import EmptyState from '../../components/ui/EmptyState';
 import { useToast } from '../../components/ui/Toast';
+import { semantic } from '../../theme/colors';
 
 type Props = NativeStackScreenProps<AdminStackParamList, 'StaffList'>;
 
@@ -217,7 +218,7 @@ export default function StaffListScreen({ navigation }: Props) {
             <Button
               onPress={handleDeleteConfirm}
               loading={deleting}
-              textColor="#EF4444"
+              textColor={semantic.error}
             >
               Удалить
             </Button>
@@ -243,12 +244,12 @@ const styles = StyleSheet.create({
   username: { opacity: 0.5, marginTop: 2 },
   cardRight: { alignItems: 'flex-end' },
   inactiveLabel: {
-    color: '#EF4444',
+    color: semantic.error,
     marginTop: 4,
   },
   lastLogin: { opacity: 0.45, marginTop: 4 },
-  lockedLabel: { color: '#B91C1C', marginTop: 4, fontWeight: '600' },
-  failedLabel: { color: '#D97706', marginTop: 4 },
+  lockedLabel: { color: semantic.error, marginTop: 4, fontWeight: '600' },
+  failedLabel: { color: semantic.warning, marginTop: 4 },
   fab: {
     position: 'absolute',
     right: 16,

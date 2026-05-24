@@ -8,6 +8,7 @@ import StaffFormScreen from '../../screens/admin/StaffFormScreen';
 import RoleListScreen from '../../screens/admin/RoleListScreen';
 import OutletManagementScreen from '../../screens/admin/OutletManagementScreen';
 import AuditLogScreen from '../../screens/admin/AuditLogScreen';
+import FinanceScreen from '../../screens/admin/FinanceScreen';
 import RevenueScreen from '../../screens/analytics/RevenueScreen';
 import TopItemsScreen from '../../screens/analytics/TopItemsScreen';
 import EmployeeStatsScreen from '../../screens/analytics/EmployeeStatsScreen';
@@ -17,6 +18,18 @@ import RoomTypeListScreen from '../../screens/admin/RoomTypeListScreen';
 import RoomTypeFormScreen from '../../screens/admin/RoomTypeFormScreen';
 import RoomFormScreen from '../../screens/admin/RoomFormScreen';
 import RoomManagementScreen from '../../screens/admin/RoomManagementScreen';
+import MenuManagementScreen from '../../screens/admin/MenuManagementScreen';
+import MenuItemFormScreen from '../../screens/admin/MenuItemFormScreen';
+import ExpenseListScreen from '../../screens/admin/ExpenseListScreen';
+import ExpenseFormScreen from '../../screens/admin/ExpenseFormScreen';
+import ExpenseCategoriesScreen from '../../screens/admin/ExpenseCategoriesScreen';
+import ExpenseCategoryFormScreen from '../../screens/admin/ExpenseCategoryFormScreen';
+import IncomeListScreen from '../../screens/admin/IncomeListScreen';
+import IncomeFormScreen from '../../screens/admin/IncomeFormScreen';
+import IncomeCategoriesScreen from '../../screens/admin/IncomeCategoriesScreen';
+import IncomeCategoryFormScreen from '../../screens/admin/IncomeCategoryFormScreen';
+import InventoryItemsScreen from '../../screens/admin/InventoryItemsScreen';
+import AdminSettingsScreen from '../../screens/admin/AdminSettingsScreen';
 import { getHeaderStyle } from '../../theme';
 import type { AdminStackParamList } from '../types';
 
@@ -54,6 +67,7 @@ export default function AdminStack() {
         component={AuditLogScreen}
         options={{ title: 'Журнал действий' }}
       />
+      <Stack.Screen name="Finance" component={FinanceScreen} options={{ title: 'Финансы' }} />
       <Stack.Screen name="Revenue" component={RevenueScreen} options={{ title: 'Выручка' }} />
       <Stack.Screen
         name="TopItems"
@@ -98,6 +112,72 @@ export default function AdminStack() {
         name="RoomManagement"
         component={RoomManagementScreen}
         options={{ title: 'Управление комнатами' }}
+      />
+      <Stack.Screen
+        name="MenuManagement"
+        component={MenuManagementScreen}
+        options={{ title: 'Меню' }}
+      />
+      <Stack.Screen
+        name="MenuItemForm"
+        component={MenuItemFormScreen}
+        options={({ route }) => ({
+          title: route.params?.itemId ? 'Редактировать позицию' : 'Новая позиция',
+        })}
+      />
+      <Stack.Screen
+        name="ExpenseList"
+        component={ExpenseListScreen}
+        options={{ title: 'Затраты' }}
+      />
+      <Stack.Screen
+        name="ExpenseForm"
+        component={ExpenseFormScreen}
+        options={{ title: 'Новая затрата' }}
+      />
+      <Stack.Screen
+        name="ExpenseCategories"
+        component={ExpenseCategoriesScreen}
+        options={{ title: 'Категории затрат' }}
+      />
+      <Stack.Screen
+        name="ExpenseCategoryForm"
+        component={ExpenseCategoryFormScreen}
+        options={({ route }) => ({
+          title: route.params?.categoryId ? 'Редактировать категорию' : 'Новая категория',
+        })}
+      />
+      <Stack.Screen
+        name="IncomeList"
+        component={IncomeListScreen}
+        options={{ title: 'Доходы' }}
+      />
+      <Stack.Screen
+        name="IncomeForm"
+        component={IncomeFormScreen}
+        options={{ title: 'Новый доход' }}
+      />
+      <Stack.Screen
+        name="IncomeCategories"
+        component={IncomeCategoriesScreen}
+        options={{ title: 'Категории доходов' }}
+      />
+      <Stack.Screen
+        name="IncomeCategoryForm"
+        component={IncomeCategoryFormScreen}
+        options={({ route }) => ({
+          title: route.params?.categoryId ? 'Редактировать категорию' : 'Новая категория',
+        })}
+      />
+      <Stack.Screen
+        name="InventoryItems"
+        component={InventoryItemsScreen}
+        options={{ title: 'POS → Склад' }}
+      />
+      <Stack.Screen
+        name="AdminSettings"
+        component={AdminSettingsScreen}
+        options={{ title: 'Настройки компании' }}
       />
     </Stack.Navigator>
   );

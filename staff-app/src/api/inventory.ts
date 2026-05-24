@@ -1,6 +1,57 @@
 import { apiFetch } from './client';
 
-export function getInventory(category?: string) {
-  const query = category ? `?category=${category}` : '';
-  return apiFetch<any[]>(`/inventory${query}`);
+export interface InventoryItem {
+  id: string;
+  name: string;
+  price: number;
+  purchasePrice: number;
+  category: string;
+  barcode?: string;
+  stock: number;
+  minStock: number;
+  parLevel: number;
+  reorderPoint: number;
+  unit: string;
+  soldCount: number;
+  isDraft: boolean;
+  pricePerLiter?: number;
+  mlPerServing?: number;
+  isActive: boolean;
+  warehouseId?: string;
+  /** FK to warehouse_items.id — if set, POS sales also deduct from this warehouse SKU */
+  warehouseItemId?: string;
+  isRentable: boolean;
+  rentalPricePerDay?: number;
+  rentedQuantity: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getInventoryItems(category?: string): Promise<InventoryItem[]> {
+  const query = category ? `?category=${encodeURIComponent(category)}` : '';
+  return apiFetch<InventoryItem[]>(`/inventory${query}`);
+}
+
+export function getInventoryItem(id: string): Promise<InventoryItem> {
+  return apiFetch<InventoryItem>(`/inventory/${id}`);
+}
+
+export function updateInventoryItem(
+  id: string,
+  data: Partial<Pick<InventoryItem, 'warehouseItemId' | 'isActive' | 'minStock' | 'parLevel' | 'reorderPoint'>>,
+): Promise<InventoryItem> {
+  return apiFetch<InventoryItem>(`/inventory/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function receiveFromWarehouse(
+  id: string,
+  quantity: number,
+): Promise<InventoryItem> {
+  return apiFetch<InventoryItem>(`/inventory/${id}/receive-from-warehouse`, {
+    method: 'POST',
+    body: JSON.stringify({ quantity }),
+  });
 }

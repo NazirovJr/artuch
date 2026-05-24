@@ -6,6 +6,7 @@ import { updateReservation } from '../../api/reservations';
 import { RoomType, getRoomType } from '../../api/room-types';
 import RoomTypeInfoCard from '../../components/RoomTypeInfoCard';
 import { useRoomStore } from '../../store/roomStore';
+import { semantic, semanticSoft } from '../../theme/colors';
 
 const STATUS_LABELS: Record<string, string> = {
   available: 'Свободен',
@@ -157,15 +158,23 @@ export default function RoomDetailScreen({ room, onBack, onCheckIn, onRefresh }:
         <Card.Title title="Статус" />
         <Card.Content>
           <View style={styles.statusRow}>
-            <Chip
-              selected={room.status === 'available'}
-              style={[
-                styles.statusChip,
-                { backgroundColor: room.status === 'available' ? '#D1FAE5' : room.status === 'occupied' ? '#FEE2E2' : '#FEF3C7' },
-              ]}
-            >
-              {STATUS_LABELS[room.status] || room.status}
-            </Chip>
+            {(() => {
+              const pair =
+                room.status === 'available'
+                  ? semanticSoft.success
+                  : room.status === 'occupied'
+                  ? semanticSoft.error
+                  : semanticSoft.warning;
+              return (
+                <Chip
+                  selected={room.status === 'available'}
+                  style={[styles.statusChip, { backgroundColor: pair.bg }]}
+                  textStyle={{ color: pair.fg }}
+                >
+                  {STATUS_LABELS[room.status] || room.status}
+                </Chip>
+              );
+            })()}
 
             <Menu
               visible={statusMenuVisible}
@@ -191,14 +200,18 @@ export default function RoomDetailScreen({ room, onBack, onCheckIn, onRefresh }:
 
           <View style={styles.statusRow}>
             <Text variant="bodyMedium">Уборка:</Text>
-            <Chip
-              onPress={handleCleaningToggle}
-              style={{
-                backgroundColor: room.cleaningStatus === 'clean' ? '#D1FAE5' : '#FEE2E2',
-              }}
-            >
-              {CLEANING_LABELS[room.cleaningStatus] || room.cleaningStatus}
-            </Chip>
+            {(() => {
+              const pair = room.cleaningStatus === 'clean' ? semanticSoft.success : semanticSoft.error;
+              return (
+                <Chip
+                  onPress={handleCleaningToggle}
+                  style={{ backgroundColor: pair.bg }}
+                  textStyle={{ color: pair.fg }}
+                >
+                  {CLEANING_LABELS[room.cleaningStatus] || room.cleaningStatus}
+                </Chip>
+              );
+            })()}
           </View>
         </Card.Content>
       </Card>
@@ -223,7 +236,7 @@ export default function RoomDetailScreen({ room, onBack, onCheckIn, onRefresh }:
               icon="logout"
               onPress={handleCheckOut}
               style={styles.actionButton}
-              buttonColor="#EF4444"
+              buttonColor={semantic.error}
               disabled={loading}
             >
               Выселить

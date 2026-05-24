@@ -73,6 +73,8 @@ export class FoliosService {
       amount: number;
       sourceId?: string;
       addedBy: string;
+      quantity?: number;
+      unitPrice?: number;
     },
   ): Promise<FolioCharge> {
     const folio = await this.findById(folioId);
@@ -87,6 +89,8 @@ export class FoliosService {
       amount: Math.abs(data.amount), // charges are positive
       sourceId: data.sourceId || undefined,
       addedBy: data.addedBy,
+      quantity: data.quantity ?? null,
+      unitPrice: data.unitPrice ?? null,
     });
     const saved = await this.chargeRepo.save(charge);
     await this.recalculate(folioId);

@@ -15,6 +15,7 @@ import { PoliciesGuard } from '../casl/policies.guard';
 import { CheckPolicies } from '../casl/check-policies.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { ManagerApprovalService } from '../auth/manager-approval.service';
+import { scopeFilter, assertCanAct } from '../casl/ownership';
 
 @Controller('v2/orders')
 @UseGuards(JwtAuthGuard, PoliciesGuard)
@@ -26,19 +27,30 @@ export class V2OrdersController {
 
   @Get()
   @CheckPolicies((ability) => ability.can('read', 'Order'))
-  findAll(@Query('status') status?: string) {
-    return this.restaurantService.findAllOrders(status);
+  findAll(@Query('status') status: string | undefined, @Req() req: any) {
+    const scope = scopeFilter(
+      req.ability,
+      'read',
+      'Order',
+      'waiterId',
+      req.user.id || req.user.sub,
+    );
+    return this.restaurantService.findAllOrders(status, scope);
   }
 
   @Get(':id')
   @CheckPolicies((ability) => ability.can('read', 'Order'))
-  findOne(@Param('id') id: string) {
-    return this.restaurantService.findOrderById(id);
+  async findOne(@Param('id') id: string, @Req() req: any) {
+    const order = await this.restaurantService.findOrderById(id);
+    assertCanAct(req.ability, 'read', 'Order', order);
+    return order;
   }
 
   @Get(':id/edit-logs')
   @CheckPolicies((ability) => ability.can('read', 'Order'))
-  findEditLogs(@Param('id') id: string) {
+  async findEditLogs(@Param('id') id: string, @Req() req: any) {
+    const order = await this.restaurantService.findOrderById(id);
+    assertCanAct(req.ability, 'read', 'Order', order);
     return this.restaurantService.findOrderEditLogs(id);
   }
 
@@ -52,7 +64,9 @@ export class V2OrdersController {
   @Patch(':id/status')
   @CheckPolicies((ability) => ability.can('update', 'Order'))
   @Audit('update-status', 'Order')
-  updateStatus(@Param('id') id: string, @Body() body: any) {
+  async updateStatus(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    const order = await this.restaurantService.findOrderById(id);
+    assertCanAct(req.ability, 'update', 'Order', order);
     return this.restaurantService.updateOrderStatus(id, body.status);
   }
 
@@ -71,6 +85,7 @@ export class V2OrdersController {
     @Req() req: any,
   ) {
     const order = await this.restaurantService.findOrderById(id);
+    assertCanAct(req.ability, 'update', 'Order', order);
     let approval: { userId: string; reason: string; approvedAt: Date } | undefined;
     if (
       this.restaurantService.isProtectedStatus(

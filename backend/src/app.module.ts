@@ -32,6 +32,10 @@ import { AlertsModule } from './alerts/alerts.module';
 import { StockModule } from './stock/stock.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
+import { FinanceModule } from './finance/finance.module';
+import { ExpensesModule } from './expenses/expenses.module';
+import { IncomesModule } from './incomes/incomes.module';
+import { SettingsModule } from './settings/settings.module';
 import { ImmutableLedgerSubscriber } from './common/subscribers/immutable-ledger.subscriber';
 import { SeedService } from './seed.service';
 
@@ -67,6 +71,10 @@ import { SeedService } from './seed.service';
     StockModule,
     SuppliersModule,
     MaintenanceModule,
+    FinanceModule,
+    ExpensesModule,
+    IncomesModule,
+    SettingsModule,
   ],
   providers: [
     SeedService,

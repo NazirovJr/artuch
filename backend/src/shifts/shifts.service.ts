@@ -11,6 +11,8 @@ import { Shift } from './entities/shift.entity';
 import { Transaction } from '../pos/entities/transaction.entity';
 import { Refund } from '../pos/entities/refund.entity';
 import { User } from '../users/entities/user.entity';
+import { Expense } from '../expenses/entities/expense.entity';
+import { Income } from '../incomes/entities/income.entity';
 import { EventsService } from '../events/events.service';
 
 const VARIANCE_THRESHOLD = Number(
@@ -28,6 +30,10 @@ export class ShiftsService {
     private readonly refundRepo: Repository<Refund>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
+    @InjectRepository(Expense)
+    private readonly expenseRepo: Repository<Expense>,
+    @InjectRepository(Income)
+    private readonly incomeRepo: Repository<Income>,
     private readonly eventsService: EventsService,
   ) {}
 
@@ -70,7 +76,12 @@ export class ShiftsService {
     return this.shiftsRepo.save(shift);
   }
 
-  /** Compute expected cash for an open shift from cash transactions/refunds. */
+  /**
+   * Compute expected cash for an open shift:
+   *   openingCash + cash sales − cash refunds − cash expenses paid from the till.
+   * Cash expenses are matched by shiftId (stamped at record time), so only
+   * petty-cash paid out of this open till counts against the drawer.
+   */
   async computeExpectedCash(shift: Shift): Promise<number> {
     const since = shift.openedAt;
     const until = new Date();
@@ -80,7 +91,7 @@ export class ShiftsService {
       .where('t.createdAt BETWEEN :since AND :until', { since, until })
       .andWhere("t.paymentMethod = 'cash'")
       .andWhere('t.employeeId = :uid', { uid: shift.userId })
-      .andWhere("t.type = 'sale'")
+      .andWhere("t.type IN ('sale', 'restaurant')")
       .getMany();
 
     const cashRefunds = await this.refundRepo
@@ -89,9 +100,27 @@ export class ShiftsService {
       .andWhere('r.employeeId = :uid', { uid: shift.userId })
       .getMany();
 
+    const expenseRow = await this.expenseRepo
+      .createQueryBuilder('e')
+      .where('e.shiftId = :sid', { sid: shift.id })
+      .andWhere("e.status = 'recorded'")
+      .andWhere("e.paymentMethod = 'cash'")
+      .select('COALESCE(SUM(e.amount),0)', 'total')
+      .getRawOne<{ total: string }>();
+
+    const incomeRow = await this.incomeRepo
+      .createQueryBuilder('i')
+      .where('i.shiftId = :sid', { sid: shift.id })
+      .andWhere("i.status = 'recorded'")
+      .andWhere("i.paymentMethod = 'cash'")
+      .select('COALESCE(SUM(i.amount),0)', 'total')
+      .getRawOne<{ total: string }>();
+
     const sales = cashTx.reduce((sum, t) => sum + Number(t.total), 0);
     const refunds = cashRefunds.reduce((sum, r) => sum + Number(r.amount), 0);
-    return Number(shift.openingCash) + sales - refunds;
+    const expenses = Number(expenseRow?.total) || 0;
+    const incomes = Number(incomeRow?.total) || 0;
+    return Number(shift.openingCash) + sales + incomes - refunds - expenses;
   }
 
   /**

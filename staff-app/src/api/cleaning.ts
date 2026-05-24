@@ -60,6 +60,17 @@ export function listChecklistTemplates() {
   return apiFetch<CleaningChecklistTemplate[]>('/v2/cleaning/checklists');
 }
 
+export function createCleaningTask(body: {
+  roomNumber: number;
+  type: string;
+  assignedTo?: string;
+}) {
+  return apiFetch<CleaningTask>('/v2/cleaning/tasks', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export function assignCleaningTask(id: string, userId: string) {
   return apiFetch<CleaningTask>(`/v2/cleaning/tasks/${id}/assign`, {
     method: 'POST',

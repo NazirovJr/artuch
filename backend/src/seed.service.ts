@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './users/entities/user.entity';
 import { Role } from './roles/entities/role.entity';
 import { RolePermission } from './roles/entities/role-permission.entity';
 import { InventoryItem } from './inventory/entities/inventory-item.entity';
 import { MenuItem } from './restaurant/entities/menu-item.entity';
+import { Order } from './restaurant/entities/order.entity';
+import { OrderItem } from './restaurant/entities/order-item.entity';
+import { RestaurantCheck } from './restaurant/entities/restaurant-check.entity';
 import { Tour } from './tours/entities/tour.entity';
 import { Room } from './hotel/entities/room.entity';
 import { RoomType } from './hotel/entities/room-type.entity';
@@ -16,6 +19,8 @@ import { Outlet } from './outlets/entities/outlet.entity';
 import { UserOutlet } from './outlets/entities/user-outlet.entity';
 import { CleaningChecklistTemplate } from './cleaning/entities/cleaning-checklist-template.entity';
 import { StockLevel } from './stock/entities/stock-level.entity';
+import { ExpenseCategory } from './expenses/entities/expense-category.entity';
+import { IncomeCategory } from './incomes/entities/income-category.entity';
 
 @Injectable()
 export class SeedService {
@@ -33,6 +38,16 @@ export class SeedService {
     // without resetting anything.
     await this.ensureSystemRoles();
 
+    // Strict per-waiter scoping (Variant B): ensureSystemRoles added the
+    // conditioned `manage Check`; this removes the stale unconditioned rule so
+    // a waiter can only see/act on checks they opened. Idempotent.
+    await this.reconcileWaiterScoping();
+
+    // Reception lost `create CleaningTask` (housekeeping requests are now
+    // admin/owner/manager only). ensureSystemRoles only ever adds permissions,
+    // so this explicit cleanup removes the stale rule from existing DBs.
+    await this.reconcileReceptionCleaning();
+
     // Same idea for legacy display-style role strings on user rows
     // ('shop-seller' / 'bartender' / 'warehouse'). Frontend gates compare
     // role literals; backend ROLE_ALIASES handle CASL but not the UI.
@@ -44,6 +59,20 @@ export class SeedService {
     // before the seed was written. Without this, the "Новое бронирование"
     // form has nothing to pick from and looks broken.
     await this.seedGuests();
+
+    // Idempotent restaurant-check migration: ensure a few "no-prep" / bar demo
+    // menu items exist (so the station routing is visible out of the box) and
+    // backfill a 1:1 check for any legacy order created before the check model.
+    // Both skip cleanly when already applied, so they run on every boot.
+    await this.ensureServiceMenuItems();
+    await this.backfillChecksForLegacyOrders();
+
+    // Default operating-expense categories — idempotent top-up so new defaults
+    // also reach already-initialised installs. Runs on every boot.
+    await this.seedExpenseCategories();
+
+    // Default other-income categories — same idempotent top-up pattern.
+    await this.seedIncomeCategories();
 
     if (userCount > 0 && roleCount > 0) {
       console.log('Database already seeded, skipping user/data seeding...');
@@ -219,6 +248,58 @@ export class SeedService {
   }
 
   /**
+   * Variant B strict scoping: the waiter role must only carry the *conditioned*
+   * Check/Order rules (scoped to `${user.id}`). ensureSystemRoles is add-only,
+   * so an older DB that still has the unconditioned `manage Check` (which would
+   * let a waiter see every table) keeps it unless we delete it here. Removing
+   * any unconditioned Check/Order rule on waiter — the conditioned versions are
+   * (re)added by ensureSystemRoles. Idempotent: a clean role removes 0 rows.
+   */
+  private async reconcileWaiterScoping() {
+    const roleRepo = this.dataSource.getRepository(Role);
+    const permRepo = this.dataSource.getRepository(RolePermission);
+    const waiter = await roleRepo.findOne({
+      where: { name: 'waiter' },
+      relations: ['permissions'],
+    });
+    if (!waiter) return;
+
+    const stale = (waiter.permissions || []).filter(
+      (p) =>
+        p.conditions == null &&
+        (p.subject === 'Check' ||
+          (p.subject === 'Order' &&
+            (p.action === 'read' || p.action === 'update'))),
+    );
+    if (stale.length > 0) {
+      await permRepo.remove(stale);
+      console.log(
+        `  Reconciled waiter scoping: removed ${stale.length} unconditioned rule(s)`,
+      );
+    }
+  }
+
+  private async reconcileReceptionCleaning() {
+    const roleRepo = this.dataSource.getRepository(Role);
+    const permRepo = this.dataSource.getRepository(RolePermission);
+    const reception = await roleRepo.findOne({
+      where: { name: 'reception' },
+      relations: ['permissions'],
+    });
+    if (!reception) return;
+
+    const stale = (reception.permissions || []).filter(
+      (p) => p.subject === 'CleaningTask' && p.action === 'create',
+    );
+    if (stale.length > 0) {
+      await permRepo.remove(stale);
+      console.log(
+        `  Reconciled reception: removed ${stale.length} stale create CleaningTask rule(s)`,
+      );
+    }
+  }
+
+  /**
    * Heal legacy user.role strings to canonical names. Older seeds inserted
    * display-style values ('shop-seller', 'bartender', 'warehouse') while
    * the rest of the codebase — frontend drawer gates, role-aware home
@@ -253,6 +334,103 @@ export class SeedService {
     }
   }
 
+  /**
+   * Insert any missing default expense categories. Idempotent: matches by name
+   * (case-insensitive), so re-runs are no-ops and new defaults heal old DBs.
+   */
+  private async seedExpenseCategories() {
+    const repo = this.dataSource.getRepository(ExpenseCategory);
+    const defaults: Array<{
+      name: string;
+      group: string;
+      icon: string;
+    }> = [
+      { name: 'Аренда', group: 'rent', icon: 'home-city-outline' },
+      { name: 'Зарплаты', group: 'payroll', icon: 'account-cash-outline' },
+      { name: 'Коммунальные', group: 'utilities', icon: 'flash-outline' },
+      { name: 'Закупка продуктов', group: 'supplies', icon: 'cart-outline' },
+      { name: 'Транспорт', group: 'transport', icon: 'truck-outline' },
+      { name: 'Маркетинг', group: 'marketing', icon: 'bullhorn-outline' },
+      { name: 'Ремонт и обслуживание', group: 'maintenance', icon: 'wrench-outline' },
+      { name: 'Налоги', group: 'tax', icon: 'bank-outline' },
+      { name: 'Прочее', group: 'other', icon: 'dots-horizontal' },
+    ];
+
+    const existing = await repo.find();
+    const haveByName = new Set(
+      existing.map((c) => c.name.trim().toLowerCase()),
+    );
+    let added = 0;
+
+    for (let i = 0; i < defaults.length; i++) {
+      const def = defaults[i];
+      if (haveByName.has(def.name.toLowerCase())) continue;
+      await repo.save(
+        repo.create({
+          name: def.name,
+          group: def.group,
+          icon: def.icon,
+          sortOrder: i,
+          isActive: true,
+          isSystem: true,
+        }),
+      );
+      added += 1;
+    }
+
+    if (added > 0) {
+      console.log(`  Seeded ${added} expense categories`);
+    }
+  }
+
+  /**
+   * Insert any missing default other-income categories. Idempotent: matches by
+   * name (case-insensitive), so re-runs are no-ops and new defaults heal old
+   * DBs. Mirrors seedExpenseCategories.
+   */
+  private async seedIncomeCategories() {
+    const repo = this.dataSource.getRepository(IncomeCategory);
+    const defaults: Array<{
+      name: string;
+      group: string;
+      icon: string;
+    }> = [
+      { name: 'Доп. услуги', group: 'service', icon: 'room-service-outline' },
+      { name: 'Сдача в аренду', group: 'rent', icon: 'home-city-outline' },
+      { name: 'Мероприятия и банкеты', group: 'event', icon: 'party-popper' },
+      { name: 'Продажа имущества', group: 'asset', icon: 'tag-outline' },
+      { name: 'Партнёрские и комиссии', group: 'partner', icon: 'handshake-outline' },
+      { name: 'Субсидии и гранты', group: 'grant', icon: 'gift-outline' },
+      { name: 'Прочее', group: 'other', icon: 'dots-horizontal' },
+    ];
+
+    const existing = await repo.find();
+    const haveByName = new Set(
+      existing.map((c) => c.name.trim().toLowerCase()),
+    );
+    let added = 0;
+
+    for (let i = 0; i < defaults.length; i++) {
+      const def = defaults[i];
+      if (haveByName.has(def.name.toLowerCase())) continue;
+      await repo.save(
+        repo.create({
+          name: def.name,
+          group: def.group,
+          icon: def.icon,
+          sortOrder: i,
+          isActive: true,
+          isSystem: true,
+        }),
+      );
+      added += 1;
+    }
+
+    if (added > 0) {
+      console.log(`  Seeded ${added} income categories`);
+    }
+  }
+
   private canonicalRoleDefs(): Array<{
     name: string;
     description: string;
@@ -269,6 +447,8 @@ export class SeedService {
           { action: 'manage', subject: 'Transaction' },
           { action: 'manage', subject: 'Refund' },
           { action: 'manage', subject: 'Order' },
+          { action: 'manage', subject: 'Check' },
+          { action: 'manage', subject: 'MenuItem' },
           { action: 'manage', subject: 'Warehouse' },
           { action: 'manage', subject: 'WarehouseItem' },
           { action: 'manage', subject: 'WarehouseTransaction' },
@@ -323,6 +503,15 @@ export class SeedService {
           { action: 'read', subject: 'Folio' },
           { action: 'update', subject: 'Folio' },
           { action: 'read', subject: 'BookingGroup' },
+          // Bar KDS: see and advance bar-routed order items, read the menu and
+          // the parent checks for context.
+          { action: 'read', subject: 'Order' },
+          { action: 'update', subject: 'Order' },
+          { action: 'read', subject: 'Check' },
+          { action: 'create', subject: 'Check' },
+          { action: 'update', subject: 'Check' },
+          { action: 'update', subject: 'InventoryItem' },
+          { action: 'read', subject: 'MenuItem' },
         ] },
       { name: 'waiter', description: 'Официант', isSystem: true,
         permissions: [
@@ -330,6 +519,9 @@ export class SeedService {
           { action: 'read', subject: 'Order', conditions: { waiterId: '${user.id}' } },
           { action: 'update', subject: 'Order', conditions: { waiterId: '${user.id}' } },
           { action: 'read', subject: 'MenuItem' },
+          // Manage only own table checks (opened by this waiter). Strict
+          // per-waiter scoping — the condition is enforced in ChecksService.
+          { action: 'manage', subject: 'Check', conditions: { openedBy: '${user.id}' } },
           // Post restaurant charges onto a guest's folio (meal billed to room).
           { action: 'read', subject: 'Folio' },
           { action: 'update', subject: 'Folio' },
@@ -339,6 +531,7 @@ export class SeedService {
         permissions: [
           { action: 'read', subject: 'Order' },
           { action: 'update', subject: 'Order' },
+          { action: 'read', subject: 'Check' },
         ] },
       { name: 'reception', description: 'Ресепшен', isSystem: true,
         permissions: [
@@ -352,8 +545,9 @@ export class SeedService {
           { action: 'manage', subject: 'BookingGroup' },
           { action: 'manage', subject: 'Guest' },
           { action: 'manage', subject: 'Folio' },
+          // Reception can see cleaning state but no longer raises requests —
+          // housekeeping tasks are created only by admin/owner/manager.
           { action: 'read', subject: 'CleaningTask' },
-          { action: 'create', subject: 'CleaningTask' },
         ] },
       { name: 'cleaning', description: 'Уборка', isSystem: true,
         permissions: [
@@ -583,6 +777,108 @@ export class SeedService {
       { name: 'Margherita Pizza', nameRu: 'Пицца Маргарита', category: 'international', price: 38, description: 'Классическая пицца с томатом и моцареллой' },
       { name: 'Fish and Chips', nameRu: 'Рыба с картофелем', category: 'international', price: 45, description: 'Рыба в кляре с картофелем фри' },
     ]);
+  }
+
+  /**
+   * Ensure a handful of "served by the waiter" (station='none') and bar
+   * (station='bar') menu items exist so the kitchen/bar/no-prep routing is
+   * demonstrable on any install. Idempotent: inserts only items missing by
+   * name, so it's safe to run on every boot and never duplicates.
+   */
+  private async ensureServiceMenuItems() {
+    const repo = this.dataSource.getRepository(MenuItem);
+    const defaults: Array<Partial<MenuItem>> = [
+      { name: 'Bread basket', nameRu: 'Хлебная корзина', nameTj: 'Сабади нон', category: 'service', station: 'none', price: 12, description: 'Ассорти свежего хлеба и лепёшек' },
+      { name: 'Still water 0.5L', nameRu: 'Вода 0,5 л', category: 'service', station: 'none', price: 8, description: 'Питьевая вода без газа' },
+      { name: 'Sparkling water 0.5L', nameRu: 'Вода газированная 0,5 л', category: 'service', station: 'none', price: 8, description: 'Питьевая вода с газом' },
+      { name: 'Fresh juice', nameRu: 'Свежевыжатый сок', category: 'bar', station: 'bar', price: 22, description: 'Сок из сезонных фруктов' },
+      { name: 'Lemonade', nameRu: 'Домашний лимонад', category: 'bar', station: 'bar', price: 18, description: 'Освежающий домашний лимонад' },
+    ];
+
+    let added = 0;
+    for (const def of defaults) {
+      const existing = await repo.findOne({ where: { name: def.name } });
+      if (existing) continue;
+      await repo.save(repo.create(def));
+      added += 1;
+    }
+    if (added > 0) {
+      console.log(`  Seeded ${added} service/bar menu item(s)`);
+    }
+  }
+
+  /**
+   * Backfill a parent check for every order created before the check model
+   * (checkId IS NULL). One check per order (1:1) so historical orders stay
+   * viewable in the consolidated-check UI; stamps each order item with a
+   * station (from its menu item, default 'kitchen') and a per-item status
+   * derived from the order status. Idempotent: guarded on checkId IS NULL.
+   */
+  private async backfillChecksForLegacyOrders() {
+    const orderRepo = this.dataSource.getRepository(Order);
+    const itemRepo = this.dataSource.getRepository(OrderItem);
+    const checkRepo = this.dataSource.getRepository(RestaurantCheck);
+    const menuRepo = this.dataSource.getRepository(MenuItem);
+
+    const legacy = await orderRepo.find({
+      where: { checkId: IsNull() },
+      relations: ['items'],
+    });
+    if (legacy.length === 0) return;
+
+    const menuItems = await menuRepo.find();
+    const stationByMenuId = new Map(
+      menuItems.map((m) => [m.id, m.station || 'kitchen']),
+    );
+
+    const ORDER_TO_ITEM_STATUS: Record<string, string> = {
+      completed: 'served',
+      ready: 'ready',
+      preparing: 'preparing',
+      pending: 'sent',
+      cancelled: 'cancelled',
+    };
+
+    let migrated = 0;
+    for (const order of legacy) {
+      const isClosed =
+        order.status === 'completed' || order.status === 'cancelled';
+      const isPaid =
+        order.paymentStatus === 'paid' ||
+        order.paymentStatus === 'charged-to-folio';
+      const check = await checkRepo.save(
+        checkRepo.create({
+          tableNumber: order.tableNumber,
+          status: isClosed ? 'closed' : 'open',
+          openedBy: order.waiterId,
+          openedByName: order.waiterName,
+          subtotal: Number(order.total) || 0,
+          total: Number(order.total) || 0,
+          folioId: order.folioId || undefined,
+          paymentMethod:
+            order.paymentStatus === 'charged-to-folio'
+              ? 'folio'
+              : order.paymentStatus === 'paid'
+                ? 'cash'
+                : undefined,
+          paidAmount: isPaid ? Number(order.total) || 0 : 0,
+          closedAt: isClosed ? order.updatedAt : undefined,
+        }),
+      );
+
+      order.checkId = check.id;
+      order.roundNumber = 1;
+      await orderRepo.save(order);
+
+      const itemStatus = ORDER_TO_ITEM_STATUS[order.status] || 'new';
+      for (const item of order.items || []) {
+        item.station = stationByMenuId.get(item.menuItemId) || 'kitchen';
+        item.status = item.station === 'none' ? 'served' : itemStatus;
+        await itemRepo.save(item);
+      }
+      migrated += 1;
+    }
+    console.log(`  Backfilled ${migrated} legacy order(s) into checks`);
   }
 
   private async seedTours() {

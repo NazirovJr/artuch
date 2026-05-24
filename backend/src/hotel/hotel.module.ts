@@ -19,7 +19,6 @@ import { BookingGroupsController } from './booking-groups.controller';
 import { CaslModule } from '../casl/casl.module';
 import { EventsModule } from '../events/events.module';
 import { FoliosModule } from '../folios/folios.module';
-import { CleaningModule } from '../cleaning/cleaning.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
@@ -34,7 +33,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
     CaslModule,
     EventsModule,
     FoliosModule,
-    CleaningModule,
     NotificationsModule,
   ],
   providers: [HotelService, RoomTypesService, BookingGroupsService],

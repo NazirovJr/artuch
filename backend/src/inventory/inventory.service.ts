@@ -1,11 +1,13 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AlertsService } from '../alerts/alerts.service';
+import { mirrorIdempotencyKey } from '../common/deterministic-uuid';
 import { StockMovementType } from '../stock/entities/stock-movement.entity';
 import { StockService } from '../stock/stock.service';
 import { InventoryItem } from './entities/inventory-item.entity';
@@ -13,6 +15,7 @@ import {
   InventoryMovement,
   InventoryMovementType,
 } from './entities/inventory-movement.entity';
+import { WarehouseItem } from '../warehouse/entities/warehouse-item.entity';
 
 const INVENTORY_TYPE_TO_STOCK: Record<
   InventoryMovementType,
@@ -53,6 +56,8 @@ export class InventoryService {
     private itemsRepo: Repository<InventoryItem>,
     @InjectRepository(InventoryMovement)
     private movementsRepo: Repository<InventoryMovement>,
+    @InjectRepository(WarehouseItem)
+    private warehouseItemsRepo: Repository<WarehouseItem>,
     @InjectDataSource() private dataSource: DataSource,
     private alertsService: AlertsService,
     private stockService: StockService,
@@ -70,6 +75,31 @@ export class InventoryService {
   ): Promise<void> {
     const stockType = INVENTORY_TYPE_TO_STOCK[type];
     if (!stockType) return;
+
+    // Adjustment is an absolute SET in the legacy table (item.stock = qty), so
+    // the unified side must SET to the same absolute too — not add it as a
+    // delta (which is what apply('adjustment') would do). Route through
+    // setExact, which records the variance as an 'adjustment' movement.
+    if (stockType === 'adjustment') {
+      await this.stockService.setExact(
+        {
+          source: 'inventory',
+          itemId: item.id,
+          itemName: item.name,
+          locationId: item.warehouseId ?? POS_DEFAULT_LOCATION,
+          locationKind: item.warehouseId ? 'warehouse' : 'outlet',
+          newQuantity: Number(data.quantity!),
+          performedBy: data.employeeId!,
+          performedByName: data.employee,
+          notes: data.note,
+          movementType: 'adjustment',
+          idempotencyKey: mirrorIdempotencyKey(data.idempotencyKey, 'inv-mirror'),
+        },
+        mgr,
+      );
+      return;
+    }
+
     await this.stockService.apply(
       {
         source: 'inventory',
@@ -85,9 +115,7 @@ export class InventoryService {
         counterparty: data.supplier,
         unitCost: data.price ? Number(data.price) : undefined,
         totalCost: data.totalCost ? Number(data.totalCost) : undefined,
-        idempotencyKey: data.idempotencyKey
-          ? `${data.idempotencyKey}:inv-mirror`
-          : undefined,
+        idempotencyKey: mirrorIdempotencyKey(data.idempotencyKey, 'inv-mirror'),
       },
       mgr,
     );
@@ -125,6 +153,12 @@ export class InventoryService {
     const item = await this.itemsRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException('Item not found');
     return item;
+  }
+
+  /** Lookup by exact name (no lock). Returns null when absent. Used by POS to
+   *  resolve a cart line's name → stable itemId before persisting. */
+  findItemByName(name: string): Promise<InventoryItem | null> {
+    return this.itemsRepo.findOne({ where: { name } });
   }
 
   async createItem(data: Partial<InventoryItem>): Promise<InventoryItem> {
@@ -220,10 +254,16 @@ export class InventoryService {
    * Goes through the same locked path as addMovement but without writing a
    * ledger entry — the caller is responsible for writing its own movement.
    */
-  async decrementStock(itemName: string, quantity: number): Promise<void> {
+  async decrementStock(
+    itemName: string,
+    quantity: number,
+    itemId?: string,
+  ): Promise<void> {
     await this.dataSource.transaction(async (mgr) => {
+      // Prefer the stable id when the caller has it; fall back to name for
+      // legacy callers / lines without a resolved id.
       const item = await mgr.findOne(InventoryItem, {
-        where: { name: itemName },
+        where: itemId ? { id: itemId } : { name: itemName },
         lock: { mode: 'pessimistic_write' },
       });
       if (!item) return;
@@ -256,6 +296,136 @@ export class InventoryService {
         },
         mgr,
       );
+    });
+  }
+
+  /**
+   * Inverse of {@link decrementStock}: put goods back on the shelf when a POS
+   * sale is refunded. Symmetric to the decrement path — locks by name, adds
+   * the same converted quantity back, walks soldCount down, and mirrors a
+   * `return_customer` movement into the unified ledger. Idempotent on the
+   * caller-supplied key so a retried refund won't double-restock. Unknown
+   * item names (services / non-stock lines) are skipped silently.
+   */
+  async restockStock(
+    itemName: string,
+    quantity: number,
+    idempotencyKey?: string,
+    itemId?: string,
+  ): Promise<void> {
+    await this.dataSource.transaction(async (mgr) => {
+      const item = await mgr.findOne(InventoryItem, {
+        where: itemId ? { id: itemId } : { name: itemName },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!item) return;
+      const addBy = this.toStockUnits(item, quantity);
+      item.stock += addBy;
+      // Keep net-sold accurate without underflowing.
+      item.soldCount = Math.max(0, Number(item.soldCount) - quantity);
+      await mgr.save(InventoryItem, item);
+      await this.maybeAlert(mgr, item);
+
+      await this.stockService.apply(
+        {
+          source: 'inventory',
+          itemId: item.id,
+          itemName: item.name,
+          locationId: item.warehouseId ?? POS_DEFAULT_LOCATION,
+          locationKind: item.warehouseId ? 'warehouse' : 'outlet',
+          type: 'return_customer',
+          quantity,
+          performedBy: 'system:pos-refund',
+          notes: 'pos refund restock',
+          idempotencyKey,
+        },
+        mgr,
+      );
+    });
+  }
+
+  /**
+   * Transfers stock from the physical warehouse to the bar/outlet counter.
+   * Atomically:
+   *   1. Validates the inventory item has a warehouseItemId and the warehouse
+   *      holds sufficient stock.
+   *   2. Decrements warehouse_items.quantity + creates a WarehouseTransaction
+   *      (type 'expense') so the withdrawal appears in the warehouse journal.
+   *   3. Increments inventory_items.stock + creates an InventoryMovement
+   *      (type 'income') so the receipt appears in the bar stock history.
+   *   4. Mirrors both sides to the unified stock ledger via StockService.
+   */
+  async receiveFromWarehouse(
+    itemId: string,
+    quantity: number,
+    actor: { id: string; name?: string },
+  ): Promise<InventoryItem> {
+    return this.dataSource.transaction(async (mgr) => {
+      const item = await mgr.findOne(InventoryItem, {
+        where: { id: itemId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!item) throw new NotFoundException('Inventory item not found');
+      if (!item.warehouseItemId)
+        throw new ConflictException('This item is not linked to a warehouse SKU');
+
+      const wItem = await mgr.findOne(WarehouseItem, {
+        where: { id: item.warehouseItemId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!wItem) throw new NotFoundException('Linked warehouse item not found');
+
+      if (Number(wItem.quantity) < quantity) {
+        throw new BadRequestException(
+          `Insufficient warehouse stock: have ${wItem.quantity} ${wItem.unit}, need ${quantity}`,
+        );
+      }
+
+      // Warehouse side: debit
+      const addBy = this.toStockUnits(item, quantity);
+      wItem.quantity = Number(wItem.quantity) - quantity;
+      await mgr.save(WarehouseItem, wItem);
+
+      // Unified ledger: warehouse issue
+      await this.stockService.apply(
+        {
+          source: 'warehouse',
+          itemId: wItem.id,
+          itemName: wItem.name,
+          locationId: wItem.warehouseId ?? '__no_warehouse__',
+          locationKind: 'warehouse',
+          type: 'issue',
+          quantity,
+          performedBy: actor.id,
+          performedByName: actor.name,
+          notes: `Отпущено в бар → ${item.name}`,
+        },
+        mgr,
+      );
+
+      // Bar/inventory side: credit
+      item.stock += addBy;
+      await mgr.save(InventoryItem, item);
+      await this.maybeAlert(mgr, item);
+
+      // Unified ledger: inventory receipt
+      await this.stockService.apply(
+        {
+          source: 'inventory',
+          itemId: item.id,
+          itemName: item.name,
+          locationId: item.warehouseId ?? POS_DEFAULT_LOCATION,
+          locationKind: item.warehouseId ? 'warehouse' : 'outlet',
+          type: 'receipt',
+          quantity: addBy,
+          performedBy: actor.id,
+          performedByName: actor.name,
+          notes: `Получено со склада`,
+        },
+        mgr,
+      );
+
+      return item;
     });
   }
 }

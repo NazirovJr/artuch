@@ -32,6 +32,12 @@ export class FolioCharge {
   @Column('decimal', { precision: 10, scale: 2 })
   amount: number; // negative for discounts/refunds/payments
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true, default: null })
+  quantity: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true, default: null })
+  unitPrice: number | null;
+
   @Column({ nullable: true })
   addedBy: string; // userId
 

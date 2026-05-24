@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { deterministicUuid } from '../common/deterministic-uuid';
 import { Transaction } from './entities/transaction.entity';
 import { Refund } from './entities/refund.entity';
 import { InventoryService } from '../inventory/inventory.service';
@@ -58,6 +59,17 @@ export class PosService {
       shiftId = shift.id;
     }
 
+    // Resolve each line's inventory itemId (prefer client-supplied, else by
+    // name) so the persisted line AND the stock deduction both bind to a
+    // stable id rather than a mutable name. Unresolved lines (services /
+    // ad-hoc) keep itemId undefined and fall back to name downstream.
+    for (const line of data.items || []) {
+      if (!line.itemId && line.name) {
+        const inv = await this.inventoryService.findItemByName(line.name);
+        if (inv) line.itemId = inv.id;
+      }
+    }
+
     const transaction = this.transRepo.create({
       ...data,
       ...(shiftId ? { shiftId } : {}),
@@ -67,7 +79,11 @@ export class PosService {
     // Decrement stock for each sold item — folio-billed goods still leave
     // the shelf, so this runs regardless of payment method.
     for (const item of data.items || []) {
-      await this.inventoryService.decrementStock(item.name, item.quantity);
+      await this.inventoryService.decrementStock(
+        item.name,
+        item.quantity,
+        item.itemId,
+      );
     }
 
     // Post onto the guest's folio if this was a room-bill sale. chargeType
@@ -142,6 +158,29 @@ export class PosService {
     transaction.status =
       refundAmount >= transactionTotal ? 'refunded' : 'partially-refunded';
     await this.transRepo.save(transaction);
+
+    // Put the refunded goods back on the shelf. Mirror of the sale-time
+    // decrement; idempotency key is per (refund, line) so a retried refund
+    // won't double-restock. Bind by the stored itemId from the original
+    // transaction line (stable key), falling back to name. Services /
+    // non-stock lines resolve to no item and are skipped inside restockStock.
+    const itemIdByName = new Map(
+      (transaction.items || []).map((it) => [it.name, it.itemId]),
+    );
+    const refundItems = data.items || [];
+    for (let i = 0; i < refundItems.length; i++) {
+      const line = refundItems[i];
+      // stock_movements.idempotencyKey is a uuid column, so derive a stable
+      // uuid from the refund id + line index rather than a free string — a
+      // retried refund reuses the same key and won't double-restock.
+      const idemKey = deterministicUuid(`refund-restock:${saved.id}:${i}`);
+      await this.inventoryService.restockStock(
+        line.name,
+        line.quantity,
+        idemKey,
+        itemIdByName.get(line.name),
+      );
+    }
 
     // Surface every refund to the owner feed. Severity scales with size:
     // anything above 25% of the original transaction is "warning", a full

@@ -22,6 +22,7 @@
  * minimal so a bare object literal works too.
  */
 import { HOTEL_INFO, type HotelInfo } from '../constants/hotel';
+import { CHARGE_TYPE_LABELS as _CHARGE_TYPE_LABELS, esc as _esc, fmt as _fmt, fmtDate as _fmtDate, PDF_BASE_STYLES as _PDF_BASE_STYLES } from './pdfUtils';
 
 export const CHARGE_TYPE_LABELS: Record<string, string> = {
   room: 'Проживание',
@@ -58,6 +59,7 @@ export interface ReceiptFolio {
 export interface ReceiptGuest {
   firstName?: string;
   lastName?: string;
+  nationality?: string;
   phone?: string | null;
   email?: string | null;
   passportNumber?: string | null;

@@ -7,9 +7,13 @@ import {
   SegmentedButtons,
   useTheme,
   Badge,
+  FAB,
 } from 'react-native-paper';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { listCleaningTasks, type CleaningTask } from '../../api/cleaning';
+import { semantic } from '../../theme/colors';
+import { violet } from '../../theme/palette';
+import { withAlpha, readableInk } from '../../utils/color';
 import EmptyState from '../../components/ui/EmptyState';
 import LoadingSkeleton from '../../components/ui/LoadingSkeleton';
 import ScreenContainer from '../../components/ui/ScreenContainer';
@@ -42,11 +46,11 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  pending: '#F59E0B',
-  'in-progress': '#3B82F6',
-  review: '#8B5CF6',
-  done: '#10B981',
-  skipped: '#6B7280',
+  pending: semantic.warning,
+  'in-progress': semantic.info,
+  review: violet.base,
+  done: semantic.success,
+  skipped: semantic.muted,
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -174,13 +178,18 @@ export default function CleaningListScreen({
                 {item.assignedToName ? ` • ${item.assignedToName}` : ''}
               </Text>
             </View>
-            <Chip
-              compact
-              style={{ backgroundColor: STATUS_COLOR[item.status] || '#999' }}
-              textStyle={{ color: '#fff', fontSize: 12 }}
-            >
-              {STATUS_LABEL[item.status] || item.status}
-            </Chip>
+            {(() => {
+              const c = STATUS_COLOR[item.status] || theme.colors.outline;
+              return (
+                <Chip
+                  compact
+                  style={{ backgroundColor: withAlpha(c, theme.dark ? 0.24 : 0.16) }}
+                  textStyle={{ color: theme.dark ? c : readableInk(c), fontSize: 12, fontWeight: '600' }}
+                >
+                  {STATUS_LABEL[item.status] || item.status}
+                </Chip>
+              );
+            })()}
           </View>
         </Card.Content>
       </Card>
@@ -214,11 +223,11 @@ export default function CleaningListScreen({
         </View>
         <View style={styles.counterChip}>
           <Text variant="labelSmall">Свободные</Text>
-          <Badge style={{ backgroundColor: '#F59E0B' }}>{counts.pending}</Badge>
+          <Badge style={{ backgroundColor: semantic.warning }}>{counts.pending}</Badge>
         </View>
         <View style={styles.counterChip}>
           <Text variant="labelSmall">На инспекции</Text>
-          <Badge style={{ backgroundColor: '#8B5CF6' }}>{counts.review}</Badge>
+          <Badge style={{ backgroundColor: violet.base }}>{counts.review}</Badge>
         </View>
       </View>
 
@@ -242,6 +251,16 @@ export default function CleaningListScreen({
           ) : null
         }
       />
+
+      {isSupervisor && (
+        <FAB
+          icon="plus"
+          label="Заявка"
+          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+          color={theme.colors.onPrimary}
+          onPress={() => navigation.navigate('CleaningRequest')}
+        />
+      )}
     </ScreenContainer>
   );
 }
@@ -264,4 +283,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   roomNumber: { fontWeight: 'bold' },
+  fab: { position: 'absolute', right: 16, bottom: 16, borderRadius: 28 },
 });

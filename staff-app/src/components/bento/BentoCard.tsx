@@ -13,21 +13,33 @@
  */
 import React from 'react';
 import { Pressable, View, StyleSheet, type ViewStyle } from 'react-native';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import Animated, {
+  FadeInUp,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+} from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Text, Icon } from 'react-native-paper';
 import { useAppTheme } from '../../hooks/useAppTheme';
-import { spacing, borderRadius, shadows } from '../../theme/spacing';
+import { spacing, shadows } from '../../theme/spacing';
+import { radius } from '../../theme/shape';
 import { useHaptics } from '../../hooks/useHaptics';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { rv, type ResponsiveValue } from '../../utils/responsive';
+import AnimatedNumber from '../ui/AnimatedNumber';
 
 export type BentoSize = 'sm' | 'md' | 'lg' | 'wide' | 'tall';
-export type BentoTone = 'neutral' | 'primary' | 'accent' | 'tonal';
+export type BentoTone = 'neutral' | 'primary' | 'accent' | 'tonal' | 'gradient';
 
 export interface BentoCardProps {
   title: string;
   /** Big number or short string drawn in display-style */
   value?: string | number;
+  /** When set, the value counts up to this number on mount (animated KPI). */
+  numericValue?: number;
+  /** Formats the animated number (money/percent/int). */
+  format?: (n: number) => string;
   /** Smaller helper line below the value */
   subtitle?: string;
   icon?: string;
@@ -75,6 +87,8 @@ const SIZE_TO_FLEX: Record<
 export default function BentoCard({
   title,
   value,
+  numericValue,
+  format,
   subtitle,
   icon,
   size = 'md',
@@ -87,34 +101,58 @@ export default function BentoCard({
   const haptics = useHaptics();
   const { bp } = useBreakpoint();
 
+  // Press-scale micro-interaction (tactile feedback on tap).
+  const scale = useSharedValue(1);
+  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
   const { background, foreground, mutedForeground } = resolveTone(theme, tone);
   const sizing = SIZE_TO_FLEX[size];
   const flexBasis = rv(sizing.flexBasis, bp);
+  const isGradient = tone === 'gradient';
+
+  // Hero gradient + matching ink (dark on light amber / light on dark brown).
+  const gradientColors = (theme.brand.tokens.gradientDawn2 as string[]);
+  const gradientInk = theme.dark ? '#F0E9DC' : '#1B2433';
+  const gradientMuted = theme.dark ? 'rgba(240,233,220,.7)' : 'rgba(27,36,51,.65)';
+
+  const fg = isGradient ? gradientInk : foreground;
+  const muted = isGradient ? gradientMuted : mutedForeground;
 
   const cardStyle: ViewStyle = {
     flexBasis: flexBasis as ViewStyle['flexBasis'],
     minHeight: sizing.minHeight,
-    backgroundColor: background,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    ...shadows.sm,
+    borderRadius: radius.bento,
+    overflow: 'hidden',
+    ...(isGradient ? shadows.md : shadows.sm),
+    ...(isGradient ? null : { backgroundColor: background }),
+    // Hairline border on neutral/tonal tiles for crisp edges on warm bg.
+    ...(tone === 'neutral' || tone === 'tonal'
+      ? { borderWidth: StyleSheet.hairlineWidth, borderColor: theme.colors.outlineVariant }
+      : null),
   };
 
   const content = (
     <>
       <View style={styles.header}>
-        {icon ? <Icon source={icon} size={22} color={foreground} /> : null}
-        <Text variant="labelLarge" style={[styles.title, { color: mutedForeground }]} numberOfLines={1}>
+        {icon ? <Icon source={icon} size={22} color={fg} /> : null}
+        <Text variant="labelLarge" style={[styles.title, { color: muted }]} numberOfLines={1}>
           {title}
         </Text>
       </View>
-      {value !== undefined ? (
-        <Text variant="displaySmall" style={[styles.value, { color: foreground }]} numberOfLines={1}>
+      {numericValue !== undefined ? (
+        <AnimatedNumber
+          value={numericValue}
+          format={format}
+          style={[styles.numValue, { color: fg }]}
+          numberOfLines={1}
+        />
+      ) : value !== undefined ? (
+        <Text variant="displaySmall" style={[styles.value, { color: fg }]} numberOfLines={1}>
           {value}
         </Text>
       ) : null}
       {subtitle ? (
-        <Text variant="bodySmall" style={[styles.subtitle, { color: mutedForeground }]} numberOfLines={2}>
+        <Text variant="bodySmall" style={[styles.subtitle, { color: muted }]} numberOfLines={2}>
           {subtitle}
         </Text>
       ) : null}
@@ -122,22 +160,41 @@ export default function BentoCard({
     </>
   );
 
+  const body = onPress ? (
+    <Pressable
+      onPress={() => {
+        haptics.light();
+        onPress();
+      }}
+      onPressIn={() => {
+        scale.value = withTiming(0.96, { duration: 120 });
+      }}
+      onPressOut={() => {
+        scale.value = withTiming(1, { duration: 180 });
+      }}
+      android_ripple={{ color: theme.colors.outlineVariant, borderless: false }}
+      style={[styles.pressable, styles.body]}
+    >
+      {content}
+    </Pressable>
+  ) : (
+    <View style={[styles.body, styles.pressable]}>{content}</View>
+  );
+
   return (
-    <Animated.View entering={FadeInUp.delay(delay).springify().damping(18)} style={cardStyle}>
-      {onPress ? (
-        <Pressable
-          onPress={() => {
-            haptics.light();
-            onPress();
-          }}
-          android_ripple={{ color: theme.colors.outlineVariant, borderless: false }}
-          style={styles.pressable}
-        >
-          {content}
-        </Pressable>
-      ) : (
-        content
-      )}
+    <Animated.View
+      entering={FadeInUp.delay(delay).springify().damping(18)}
+      style={[cardStyle, pressStyle]}
+    >
+      {isGradient ? (
+        <LinearGradient
+          colors={gradientColors as [string, string, ...string[]]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      {body}
     </Animated.View>
   );
 }
@@ -176,6 +233,10 @@ const styles = StyleSheet.create({
   pressable: {
     flex: 1,
   },
+  body: {
+    flex: 1,
+    padding: spacing.lg,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -190,6 +251,13 @@ const styles = StyleSheet.create({
   },
   value: {
     fontWeight: '700',
+    marginTop: spacing.xs,
+  },
+  numValue: {
+    fontFamily: 'Unbounded-Bold',
+    fontSize: 30,
+    lineHeight: 36,
+    letterSpacing: -0.5,
     marginTop: spacing.xs,
   },
   subtitle: {

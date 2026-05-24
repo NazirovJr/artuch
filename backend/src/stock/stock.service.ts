@@ -285,9 +285,12 @@ export class StockService {
   }
 
   /**
-   * Force the StockLevel.quantity to an exact value (used by stocktake
-   * approval). Computes the variance and writes a single 'stocktake'
-   * ledger entry capturing the delta.
+   * Force the StockLevel.quantity to an exact value. Computes the variance
+   * and writes a single ledger entry capturing the delta. Used by:
+   *   - stocktake approval → movementType 'stocktake' (default)
+   *   - adjustment mirror  → movementType 'adjustment' (legacy adjustment is
+   *     an absolute SET, so the unified side must SET too, not add a delta)
+   * Idempotent on idempotencyKey.
    */
   async setExact(
     p: {
@@ -302,10 +305,19 @@ export class StockService {
       referenceType?: string;
       referenceId?: string;
       notes?: string;
+      movementType?: StockMovementType;
+      idempotencyKey?: string;
     },
     mgr?: EntityManager,
   ): Promise<StockMovement | null> {
     const run = async (m: EntityManager) => {
+      if (p.idempotencyKey) {
+        const existing = await m.findOne(StockMovement, {
+          where: { idempotencyKey: p.idempotencyKey },
+        });
+        if (existing) return existing;
+      }
+
       const level = await this.lockLevel(m, {
         source: p.source,
         itemId: p.itemId,
@@ -324,7 +336,7 @@ export class StockService {
         itemName: p.itemName,
         locationId: p.locationId,
         locationKind: p.locationKind,
-        type: 'stocktake',
+        type: p.movementType ?? 'stocktake',
         quantity: Math.abs(delta),
         balanceAfter: level.quantity,
         reservedAfter: Number(level.reservedQuantity),
@@ -335,6 +347,7 @@ export class StockService {
         notes: `${delta > 0 ? 'overage' : 'shortage'}${
           p.notes ? `: ${p.notes}` : ''
         }`,
+        idempotencyKey: p.idempotencyKey,
       });
       return m.save(StockMovement, movement);
     };

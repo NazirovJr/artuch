@@ -5,6 +5,7 @@ import { getTransactions, createRefund } from '../../api/pos';
 import { useAuthStore } from '../../store/authStore';
 import { useManagerApproval } from '../../hooks/useManagerApproval';
 import ManagerPinDialog from '../../components/ManagerPinDialog';
+import { semantic } from '../../theme/colors';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { POSStackParamList } from '../../navigation/types';
 
@@ -261,7 +262,7 @@ export default function RefundScreen({ navigation }: Props) {
           <Divider style={{ marginVertical: 12 }} />
           <View style={styles.summaryRow}>
             <Text variant="titleMedium">Сумма возврата:</Text>
-            <Text variant="titleMedium" style={{ fontWeight: 'bold', color: '#EF4444' }}>
+            <Text variant="titleMedium" style={{ fontWeight: 'bold', color: semantic.error }}>
               {refundAmount.toFixed(2)} TJS
             </Text>
           </View>
@@ -283,7 +284,7 @@ export default function RefundScreen({ navigation }: Props) {
           loading={submitting}
           disabled={submitting || selectedItems.length === 0 || !reason.trim()}
           style={styles.actionButton}
-          buttonColor="#EF4444"
+          buttonColor={semantic.error}
         >
           Оформить возврат
         </Button>

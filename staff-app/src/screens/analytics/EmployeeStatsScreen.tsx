@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, FlatList, RefreshControl, StyleSheet } from 'react-native';
 import { Card, Text, useTheme } from 'react-native-paper';
 import { getEmployeeStats } from '../../api/analytics';
+import { semantic } from '../../theme/colors';
 
 export default function EmployeeStatsScreen() {
   const theme = useTheme();
@@ -40,7 +41,7 @@ export default function EmployeeStatsScreen() {
             </Text>
           </View>
           <View style={styles.stat}>
-            <Text variant="titleSmall" style={[styles.statValue, { color: '#10B981' }]}>
+            <Text variant="titleSmall" style={[styles.statValue, { color: semantic.success }]}>
               {item.totalRevenue.toLocaleString('ru-RU')} TJS
             </Text>
             <Text variant="bodySmall" style={styles.statLabel}>

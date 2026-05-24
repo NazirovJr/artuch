@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Card, Text, TextInput, Button, Divider, useTheme } from 'react-native-paper';
 import { getFolio, addPayment, closeFolio } from '../../api/folios';
+import { semantic } from '../../theme/colors';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RoomsStackParamList } from '../../navigation/types';
 
@@ -113,7 +114,7 @@ export default function CloseFolioScreen({ route, navigation }: Props) {
           </View>
           <View style={styles.infoRow}>
             <Text variant="bodyMedium">Оплачено</Text>
-            <Text variant="bodyMedium" style={{ fontWeight: 'bold', color: '#10B981' }}>
+            <Text variant="bodyMedium" style={{ fontWeight: 'bold', color: semantic.success }}>
               {paidAmount.toFixed(2)} TJS
             </Text>
           </View>
@@ -122,7 +123,7 @@ export default function CloseFolioScreen({ route, navigation }: Props) {
             <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>К оплате</Text>
             <Text
               variant="titleMedium"
-              style={{ fontWeight: 'bold', color: balance > 0 ? '#EF4444' : '#10B981' }}
+              style={{ fontWeight: 'bold', color: balance > 0 ? semantic.error : semantic.success }}
             >
               {balance.toFixed(2)} TJS
             </Text>
@@ -149,7 +150,7 @@ export default function CloseFolioScreen({ route, navigation }: Props) {
               onPress={handlePayAndClose}
               loading={submitting}
               disabled={submitting}
-              style={[styles.button, { backgroundColor: '#10B981' }]}
+              style={[styles.button, { backgroundColor: semantic.success }]}
             >
               Оплатить и закрыть
             </Button>
@@ -159,7 +160,7 @@ export default function CloseFolioScreen({ route, navigation }: Props) {
               onPress={handleCloseWithoutPayment}
               disabled={submitting}
               style={styles.button}
-              textColor="#EF4444"
+              textColor={semantic.error}
             >
               Закрыть без оплаты
             </Button>

@@ -33,6 +33,28 @@ export class EventsService {
     this.gateway.server?.emit('transaction:created', transaction);
   }
 
+  emitCheckOpened(check: any) {
+    this.gateway.server?.emit('check:opened', check);
+  }
+
+  emitCheckUpdated(check: any) {
+    this.gateway.server?.emit('check:updated', check);
+  }
+
+  emitCheckClosed(checkId: string) {
+    this.gateway.server?.emit('check:closed', { checkId });
+  }
+
+  /**
+   * Nudge a station's KDS (kitchen / bar) to refresh — emitted when a round is
+   * fired or an item's status changes. Carries the station so each KDS can
+   * filter to its own queue; the staff app falls back to polling if the socket
+   * is down.
+   */
+  emitKdsUpdated(station: string) {
+    this.gateway.server?.emit('kds:updated', { station });
+  }
+
   emitInventoryLowStock(item: any) {
     this.gateway.server?.emit('inventory:lowStock', item);
   }
@@ -67,7 +89,9 @@ export class EventsService {
       | 'shift-variance'
       | 'order-edit'
       | 'cleaning-skip'
-      | 'reservation-cancel';
+      | 'reservation-cancel'
+      | 'expense'
+      | 'income';
     severity: 'info' | 'warning' | 'critical';
     title: string;
     detail?: string;

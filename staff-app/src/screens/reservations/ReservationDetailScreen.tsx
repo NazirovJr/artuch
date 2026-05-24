@@ -7,6 +7,7 @@ import type { RoomsStackParamList } from '../../navigation/types';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { useToast } from '../../components/ui/Toast';
 import { confirm } from '../../utils/confirm';
+import { semantic } from '../../theme/colors';
 
 type Props = NativeStackScreenProps<RoomsStackParamList, 'ReservationDetail'> & {
   /** Master-detail mode: bypasses route.params for SplitView. */
@@ -263,7 +264,7 @@ export default function ReservationDetailScreen({
             mode="contained"
             icon="receipt"
             onPress={() => navigation.navigate('FolioDetail', { folioId: reservation.folioId })}
-            style={[styles.actionButton, { backgroundColor: '#10B981' }]}
+            style={[styles.actionButton, { backgroundColor: semantic.success }]}
           >
             Открыть счёт · принять оплату
           </Button>
@@ -290,7 +291,7 @@ export default function ReservationDetailScreen({
             loading={updating}
             disabled={updating}
             style={styles.actionButton}
-            textColor="#EF4444"
+            textColor={semantic.error}
           >
             Отменить
           </Button>

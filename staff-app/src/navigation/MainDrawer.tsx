@@ -9,6 +9,7 @@ import HomeStack from './stacks/HomeStack';
 import POSStack from './stacks/POSStack';
 import OrdersStack from './stacks/OrdersStack';
 import KitchenStack from './stacks/KitchenStack';
+import BarStack from './stacks/BarStack';
 import RoomsStack from './stacks/RoomsStack';
 import CleaningStack from './stacks/CleaningStack';
 import WarehouseStack from './stacks/WarehouseStack';
@@ -23,6 +24,7 @@ const DRAWER_ICONS: Record<string, string> = {
   POSDrawer: 'cash-register',
   OrdersDrawer: 'food-fork-drink',
   KitchenDrawer: 'pot-steam',
+  BarDrawer: 'glass-cocktail',
   RoomsDrawer: 'bed',
   CleaningDrawer: 'broom',
   WarehouseDrawer: 'warehouse',
@@ -47,6 +49,7 @@ export default function MainDrawer() {
   const canPOS = isPrivileged || ['cashier', 'barman'].includes(role);
   const canOrders = isPrivileged || role === 'waiter';
   const canKitchen = isPrivileged || role === 'cook';
+  const canBar = isPrivileged || role === 'barman';
   const canRooms = isPrivileged || role === 'reception';
   const canCleaning = isPrivileged || role === 'cleaning';
   const canWarehouse = isPrivileged || role === 'warehouse-keeper';
@@ -90,7 +93,7 @@ export default function MainDrawer() {
         <Drawer.Screen
           name="OrdersDrawer"
           component={OrdersStack}
-          options={{ title: 'Заказы', drawerIcon: ({ color, size }) => <Icon source={DRAWER_ICONS.OrdersDrawer} size={size} color={color} /> }}
+          options={{ title: 'Столы', drawerIcon: ({ color, size }) => <Icon source={DRAWER_ICONS.OrdersDrawer} size={size} color={color} /> }}
         />
       )}
       {canKitchen && (
@@ -98,6 +101,13 @@ export default function MainDrawer() {
           name="KitchenDrawer"
           component={KitchenStack}
           options={{ title: 'Кухня', drawerIcon: ({ color, size }) => <Icon source={DRAWER_ICONS.KitchenDrawer} size={size} color={color} /> }}
+        />
+      )}
+      {canBar && (
+        <Drawer.Screen
+          name="BarDrawer"
+          component={BarStack}
+          options={{ title: 'Бар', drawerIcon: ({ color, size }) => <Icon source={DRAWER_ICONS.BarDrawer} size={size} color={color} /> }}
         />
       )}
       {canRooms && (
