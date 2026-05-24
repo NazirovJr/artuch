@@ -6,6 +6,7 @@
   "author": "Artuch Travel",
   "license": "UNLICENSED",
   "private": true,
+  "repository": "https://github.com/NazirovJr/artuch",
   "scripts": {
     "start": "electron .",
     "build:win": "electron-builder --win --publish never"
@@ -29,19 +30,29 @@
       "web-build/**/*",
       "package.json"
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "NazirovJr",
+        "repo": "artuch"
+      }
+    ],
     "win": {
       "target": [
         "nsis",
         "portable"
-      ],
-      "artifactName": "ArtuchStaff-${version}-${arch}.${ext}"
+      ]
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Artuch Staff"
+      "shortcutName": "Artuch Staff",
+      "artifactName": "ArtuchStaff-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "ArtuchStaff-Portable-${version}.${ext}"
     }
   }
 }
