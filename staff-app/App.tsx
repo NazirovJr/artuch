@@ -16,6 +16,7 @@ import {
   Unbounded_600SemiBold,
   Unbounded_700Bold,
 } from '@expo-google-fonts/unbounded';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { installWebAlertPolyfill } from './src/utils/webAlertPolyfill';
 import {
   getBaseUrl,
@@ -46,6 +47,14 @@ registerAppFont('Onest-SemiBold', Onest_600SemiBold);
 registerAppFont('Onest-Bold', Onest_700Bold);
 registerAppFont('Unbounded-SemiBold', Unbounded_600SemiBold);
 registerAppFont('Unbounded-Bold', Unbounded_700Bold);
+
+// MaterialCommunityIcons font — on native it's bundled into the binary,
+// but web/Electron needs an explicit @font-face registration or every
+// icon renders as an empty box (☐). expo-font picks it up at runtime.
+const mciFont = (MaterialCommunityIcons as any).font?.MaterialCommunityIcons;
+if (mciFont) {
+  registerAppFont('MaterialCommunityIcons', mciFont);
+}
 
 // Other optional assets (kitchen sound, etc.) register the same way — see
 // assets/fonts/README.md and assets/sounds/README.md.
