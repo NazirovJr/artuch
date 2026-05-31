@@ -40,6 +40,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Reclaim ~20 GB the runner pre-loads with toolchains we don't use
+      # (.NET, Haskell, Swift, CodeQL). Reanimated/worklets compile native
+      # C++ and can otherwise exhaust the runner's ~14 GB free disk. Only
+      # removes clearly-unrelated dirs — never the Android SDK/NDK.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/share/swift /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean || true
+          df -h /
+
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
@@ -73,13 +83,19 @@ jobs:
       # on any device with "Install from unknown sources" enabled. Good
       # enough for staff testing. A release/Play Store APK needs a proper
       # keystore stored in repo secrets (separate follow-up).
+      #
+      # Build ONLY arm64-v8a: every real Android phone/tablet since ~2017 is
+      # arm64. Skipping x86/x86_64 (emulator-only) + armeabi-v7a cuts the
+      # native C++ build ~4× (39 min → ~12 min) and sidesteps the
+      # reanimated x86 .so AAR-packaging failure. To support ancient 32-bit
+      # devices, add armeabi-v7a to the comma list below.
       - name: Build APK
         working-directory: staff-app/android
         run: |
           if [ "$BUILD_TYPE" = "release" ]; then
-            ./gradlew assembleRelease --no-daemon
+            ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
           else
-            ./gradlew assembleDebug --no-daemon
+            ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a
           fi
 
       - name: Upload APK
