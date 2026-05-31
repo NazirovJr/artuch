@@ -1,0 +1,90 @@
+name: Android APK
+
+# Builds the Android app: prebuilds the native project from app.json
+# (Expo Continuous Native Generation), then runs Gradle to produce an APK.
+# Output lands in the run's Artifacts. Auto-runs on push to master.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apiUrl:
+        description: "Backend API base URL baked into the build (no trailing /api)"
+        required: true
+        default: "https://artuch.org"
+      buildType:
+        description: "Build type"
+        required: true
+        default: "debug"
+        type: choice
+        options:
+          - debug
+          - release
+  push:
+    branches:
+      - master
+    paths:
+      - "staff-app/**"
+      - ".github/workflows/android.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # API URL baked into the JS bundle. Manual run overrides; auto runs
+      # use the artuch.org default.
+      EXPO_PUBLIC_API_URL: ${{ github.event.inputs.apiUrl || 'https://artuch.org' }}
+      BUILD_TYPE: ${{ github.event.inputs.buildType || 'debug' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Android Gradle Plugin 8.x requires JDK 17 — Java 21+ trips it.
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+
+      - name: Install staff-app deps
+        working-directory: staff-app
+        run: npm install --no-audit --no-fund
+
+      - name: Expo prebuild (generate android/)
+        working-directory: staff-app
+        run: npx expo prebuild --platform android --no-install --non-interactive
+
+      - name: Make gradlew executable
+        working-directory: staff-app/android
+        run: chmod +x ./gradlew
+
+      # Debug APK: signed with the auto-generated debug keystore — installs
+      # on any device with "Install from unknown sources" enabled. Good
+      # enough for staff testing. A release/Play Store APK needs a proper
+      # keystore stored in repo secrets (separate follow-up).
+      - name: Build APK
+        working-directory: staff-app/android
+        run: |
+          if [ "$BUILD_TYPE" = "release" ]; then
+            ./gradlew assembleRelease --no-daemon
+          else
+            ./gradlew assembleDebug --no-daemon
+          fi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArtuchStaff-Android-${{ env.BUILD_TYPE }}
+          path: staff-app/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
