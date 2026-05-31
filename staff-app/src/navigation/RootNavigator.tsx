@@ -5,8 +5,8 @@ import {
   DarkTheme as NavigationDarkTheme,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, StyleSheet } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { View, StyleSheet, Image } from 'react-native';
+import { Text } from 'react-native-paper';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import LoginScreen from '../screens/auth/LoginScreen';
 import MainDrawer from './MainDrawer';
@@ -76,7 +76,11 @@ export default function RootNavigator() {
       <View style={[splashStyles.container, { backgroundColor: theme.colors.primary }]}>
         <Animated.View entering={FadeIn.duration(600)} style={splashStyles.content}>
           <View style={[splashStyles.logoCircle, { backgroundColor: theme.colors.onPrimary }]}>
-            <Icon source="image-filter-hdr" size={56} color={theme.colors.primary} />
+            <Image
+              source={require('../../assets/logo-mark.png')}
+              style={splashStyles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Text variant="headlineMedium" style={[splashStyles.title, { color: theme.colors.onPrimary }]}>
             Artuch Travel
@@ -112,6 +116,11 @@ const splashStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 72,
+    height: 72,
   },
   title: { fontWeight: 'bold' },
   subtitle: { marginTop: 4 },

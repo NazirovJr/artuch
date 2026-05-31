@@ -36,6 +36,7 @@ async function createWindow() {
     minHeight: 680,
     backgroundColor: '#F4EEE2',
     title: 'Artuch Staff',
+    icon: path.join(__dirname, 'build', 'icon.png'),
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,

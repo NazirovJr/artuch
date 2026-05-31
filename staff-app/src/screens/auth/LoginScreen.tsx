@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
-import { TextInput, Button, Text, Surface, Icon, useTheme } from 'react-native-paper';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { TextInput, Button, Text, Surface, useTheme } from 'react-native-paper';
 import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
 import { login } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
@@ -45,7 +45,11 @@ export default function LoginScreen() {
       <View style={styles.contentClamp}>
         <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.brandingContainer}>
           <View style={[styles.logoCircle, { backgroundColor: theme.colors.onPrimary }]}>
-            <Icon source="image-filter-hdr" size={48} color={theme.colors.primary} />
+            <Image
+              source={require('../../../assets/logo-mark.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Text variant="headlineLarge" style={[styles.brandTitle, { color: theme.colors.onPrimary }]}>
             Artuch Travel
@@ -113,6 +117,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 60,
+    height: 60,
   },
   brandTitle: { fontWeight: 'bold', textAlign: 'center' },
   brandSubtitle: { opacity: 0.8, textAlign: 'center', marginTop: 4 },
