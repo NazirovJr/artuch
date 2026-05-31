@@ -50,10 +50,18 @@ registerAppFont('Unbounded-Bold', Unbounded_700Bold);
 
 // MaterialCommunityIcons font — on native it's bundled into the binary,
 // but web/Electron needs an explicit @font-face registration or every
-// icon renders as an empty box (☐). expo-font picks it up at runtime.
-const mciFont = (MaterialCommunityIcons as any).font?.MaterialCommunityIcons;
-if (mciFont) {
-  registerAppFont('MaterialCommunityIcons', mciFont);
+// icon renders as an empty box (☐). `MaterialCommunityIcons.font` is the
+// canonical map `{ 'material-community': <ttfAsset> }` — its key is the
+// exact font-family react-native-paper renders glyphs with, so we must
+// register it verbatim (NOT under the name 'MaterialCommunityIcons').
+// Registering every entry == calling MaterialCommunityIcons.loadFont().
+const mciFonts = (MaterialCommunityIcons as any).font as
+  | Record<string, number>
+  | undefined;
+if (mciFonts) {
+  for (const [family, asset] of Object.entries(mciFonts)) {
+    registerAppFont(family, asset);
+  }
 }
 
 // Other optional assets (kitchen sound, etc.) register the same way — see

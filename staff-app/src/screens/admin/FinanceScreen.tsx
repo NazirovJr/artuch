@@ -677,6 +677,22 @@ function DateField({
           value={display}
           min={minDate ? fmtISO(minDate) : undefined}
           max={maxDate ? fmtISO(maxDate) : undefined}
+          // Chromium needs showPicker() — a plain click on the field body
+          // won't open the calendar popup (only the picker indicator does).
+          onClick={(e) => {
+            try {
+              (e.currentTarget as any).showPicker?.();
+            } catch {
+              /* ignore */
+            }
+          }}
+          onFocus={(e) => {
+            try {
+              (e.currentTarget as any).showPicker?.();
+            } catch {
+              /* ignore */
+            }
+          }}
           onChange={(e) => {
             const d = parseISO((e.target as HTMLInputElement).value);
             if (d) onChange(d);
@@ -727,6 +743,8 @@ const dateWebOverlay: any = {
   cursor: 'pointer',
   border: 'none',
   background: 'transparent',
+  // Above Paper's affix icons so the whole field captures the click.
+  zIndex: 1,
 };
 
 const styles = StyleSheet.create({

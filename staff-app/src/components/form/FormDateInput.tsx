@@ -126,6 +126,24 @@ export default function FormDateInput<
                     value={display}
                     min={minDate ? formatDisplay(minDate) : undefined}
                     max={maxDate ? formatDisplay(maxDate) : undefined}
+                    // Chromium opens the calendar only via the (here invisible)
+                    // picker indicator or showPicker() — a plain click on the
+                    // field body does nothing. Trigger it explicitly on the
+                    // user gesture so the popup actually appears in Electron.
+                    onClick={(e) => {
+                      try {
+                        (e.currentTarget as any).showPicker?.();
+                      } catch {
+                        /* not user-activated / unsupported — ignore */
+                      }
+                    }}
+                    onFocus={(e) => {
+                      try {
+                        (e.currentTarget as any).showPicker?.();
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
                     onChange={(e) => {
                       const next = parseISO((e.target as HTMLInputElement).value);
                       onChange(next);
@@ -199,6 +217,8 @@ const webOverlayStyle: any = {
   cursor: 'pointer',
   border: 'none',
   background: 'transparent',
+  // Sit above Paper's affix icons so the whole field captures the click.
+  zIndex: 1,
 };
 
 const styles = StyleSheet.create({
