@@ -12,13 +12,13 @@ on:
         required: true
         default: "https://artuch.org"
       buildType:
-        description: "Build type"
+        description: "Build type (release = standalone APK, runs without Metro)"
         required: true
-        default: "debug"
+        default: "release"
         type: choice
         options:
-          - debug
           - release
+          - debug
   push:
     branches:
       - master
@@ -34,7 +34,9 @@ jobs:
       # API URL baked into the JS bundle. Manual run overrides; auto runs
       # use the artuch.org default.
       EXPO_PUBLIC_API_URL: ${{ github.event.inputs.apiUrl || 'https://artuch.org' }}
-      BUILD_TYPE: ${{ github.event.inputs.buildType || 'debug' }}
+      # release = JS bundle baked into the APK → runs standalone on any
+      # device (no Metro). debug expects a reachable Metro dev server.
+      BUILD_TYPE: ${{ github.event.inputs.buildType || 'release' }}
 
     steps:
       - name: Checkout
@@ -79,10 +81,12 @@ jobs:
         working-directory: staff-app/android
         run: chmod +x ./gradlew
 
-      # Debug APK: signed with the auto-generated debug keystore — installs
-      # on any device with "Install from unknown sources" enabled. Good
-      # enough for staff testing. A release/Play Store APK needs a proper
-      # keystore stored in repo secrets (separate follow-up).
+      # release APK bakes index.android.bundle into the package → installs
+      # and runs standalone on any device ("Install from unknown sources"),
+      # NO Metro server needed. Expo's template signs release with the debug
+      # keystore by default, so it's installable as-is (not Play-Store
+      # uploadable — that needs a real keystore in repo secrets, a follow-up).
+      # debug APK, by contrast, expects a reachable Metro dev server.
       #
       # Build ONLY arm64-v8a: every real Android phone/tablet since ~2017 is
       # arm64. Skipping x86/x86_64 (emulator-only) + armeabi-v7a cuts the
