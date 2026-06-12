@@ -1,13 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 
 /**
  * Outbound email/SMS service for guest-facing notifications.
  *
- * Currently emits structured log lines so the call sites and templates exist
- * in production code; flipping to real delivery is a matter of installing
- * nodemailer and Twilio and replacing the body of the two `deliver*`
- * methods. SMTP/Twilio configuration is read from env so adding the SDK
- * later requires no other code changes.
+ * Email delivers for real through SMTP (nodemailer) once SMTP_* env vars
+ * are set; without them every send is a structured log line, so dev and
+ * un-configured installs stay silent-but-observable. SMS remains a stub —
+ * Tajikistan deployments will use a local SMS gateway, which is a one-method
+ * change here once an account exists.
+ *
+ * SMTP env contract:
+ *   SMTP_HOST   e.g. smtp.gmail.com (required to enable)
+ *   SMTP_PORT   default 587 (465 → implicit TLS)
+ *   SMTP_USER / SMTP_PASS   auth (optional for open relays)
+ *   SMTP_FROM   default "Artuch Travel <SMTP_USER>"
  */
 @Injectable()
 export class OutboundMessageService {
@@ -15,6 +23,31 @@ export class OutboundMessageService {
 
   private smtpEnabled = !!process.env.SMTP_HOST;
   private twilioEnabled = !!process.env.TWILIO_ACCOUNT_SID;
+  private transporter: Transporter | null = null;
+
+  /** Lazily build (and reuse) the SMTP transport — boot must not depend on
+   *  the mail server being reachable. */
+  private getTransporter(): Transporter {
+    if (!this.transporter) {
+      const port = Number(process.env.SMTP_PORT) || 587;
+      this.transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port,
+        secure: port === 465,
+        auth: process.env.SMTP_USER
+          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+          : undefined,
+      });
+    }
+    return this.transporter;
+  }
+
+  private fromAddress(): string {
+    return (
+      process.env.SMTP_FROM ||
+      `Artuch Travel <${process.env.SMTP_USER || 'noreply@artuch.org'}>`
+    );
+  }
 
   async sendEmail(to: string, subject: string, body: string): Promise<void> {
     if (!to) return;
@@ -22,8 +55,19 @@ export class OutboundMessageService {
       this.logger.log(`[EMAIL stub] to=${to} subject="${subject}"`);
       return;
     }
-    // TODO: integrate nodemailer
-    this.logger.log(`[EMAIL] to=${to} subject="${subject}"`);
+    try {
+      await this.getTransporter().sendMail({
+        from: this.fromAddress(),
+        to,
+        subject,
+        text: body,
+      });
+      this.logger.log(`[EMAIL sent] to=${to} subject="${subject}"`);
+    } catch (e: any) {
+      // Notifications are best-effort: a mail outage must never fail the
+      // business operation (check-in, folio close) that triggered it.
+      this.logger.error(`[EMAIL failed] to=${to}: ${e?.message ?? e}`);
+    }
   }
 
   /**
@@ -45,10 +89,19 @@ export class OutboundMessageService {
       );
       return;
     }
-    // TODO: integrate nodemailer with html: safeHtml
-    this.logger.log(
-      `[EMAIL html] to=${to} subject="${subject}" size=${safeHtml.length}`,
-    );
+    try {
+      await this.getTransporter().sendMail({
+        from: this.fromAddress(),
+        to,
+        subject,
+        html: safeHtml,
+      });
+      this.logger.log(
+        `[EMAIL html sent] to=${to} subject="${subject}" size=${safeHtml.length}`,
+      );
+    } catch (e: any) {
+      this.logger.error(`[EMAIL html failed] to=${to}: ${e?.message ?? e}`);
+    }
   }
 
   async sendSms(to: string, body: string): Promise<void> {

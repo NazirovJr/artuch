@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
 import { AppModule } from './app.module';
@@ -35,6 +36,20 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Swagger UI at /api/docs (spec at /api/docs-json). Off in production by
+  // default — the staff API isn't a public contract; flip SWAGGER_ENABLED=1
+  // to expose it behind your own network controls.
+  if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === '1') {
+    const config = new DocumentBuilder()
+      .setTitle('Artuch ERP API')
+      .setDescription('Hospitality ERP — hotel, restaurant, POS, warehouse, finance')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   await app.listen(3000, '0.0.0.0');
   console.log('Backend running on http://localhost:3000');

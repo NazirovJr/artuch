@@ -25,3 +25,6 @@ desktop/web-build/
 # ── Local working dirs ─────────────────────────────────────────
 _design_review/
 logo-png/
+
+# ── DB backups (db-backup sidecar output) ──────────────────────
+backups/
