@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { RefreshToken } from './entities/refresh-token.entity';
+import { getJwtSecret } from '../config/secrets';
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { RefreshToken } from './entities/refresh-token.entity';
     PassportModule,
     TypeOrmModule.forFeature([RefreshToken]),
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'dev_jwt_secret',
+      secret: getJwtSecret(),
       signOptions: { expiresIn: '15m' },
     }),
   ],

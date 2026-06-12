@@ -25,7 +25,13 @@ async function bootstrap() {
     credentials: true,
   });
   app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, transform: true }),
+    new ValidationPipe({
+      whitelist: true,
+      // Reject (don't silently strip) unexpected fields — surfaces typos
+      // and probing early instead of accepting malformed payloads.
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
   );
 
   await app.listen(3000, '0.0.0.0');

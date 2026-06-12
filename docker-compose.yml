@@ -1,17 +1,19 @@
+# Secrets are read from a local `.env` file (NOT committed). Copy
+# `.env.example` → `.env` and fill in real values before `docker compose up`.
 services:
   postgres:
     image: postgres:16-alpine
     container_name: artuch-db
     environment:
-      POSTGRES_DB: artuch
-      POSTGRES_USER: artuch
-      POSTGRES_PASSWORD: artuch_dev_2026
+      POSTGRES_DB: ${POSTGRES_DB:-artuch}
+      POSTGRES_USER: ${POSTGRES_USER:-artuch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U artuch"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-artuch}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,56 +24,12 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://artuch:artuch_dev_2026@postgres:5432/artuch
-      JWT_SECRET: dev_jwt_secret_artuch_2026
-      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-artuch}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-artuch}
+      JWT_SECRET: ${JWT_SECRET:?set a strong JWT_SECRET in .env (openssl rand -hex 32)}
+      NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./backend/src:/app/src
-
-  mobile-app:
-    image: artuch-mobile
-    build:
-      context: "./Mobile App for Artuch Travel"
-      dockerfile: ../Dockerfile
-    container_name: artuch-mobile
-    ports:
-      - "5173:5173"
-    volumes:
-      - "./Mobile App for Artuch Travel/src:/app/src"
-    command: npx vite --host 0.0.0.0 --port 5173
-    depends_on:
-      - backend
-
-  shop-bar:
-    image: artuch-shop-bar
-    build:
-      context: "./Магазин и бар для туристов"
-      dockerfile: ../Dockerfile
-    container_name: artuch-shop-bar
-    ports:
-      - "5174:5174"
-    volumes:
-      - "./Магазин и бар для туристов/src:/app/src"
-    command: npx vite --host 0.0.0.0 --port 5174
-    depends_on:
-      - backend
-
-  food-ordering:
-    image: artuch-food
-    build:
-      context: "./Система заказа блюд"
-      dockerfile: ../Dockerfile
-    container_name: artuch-food
-    ports:
-      - "5175:5175"
-    volumes:
-      - "./Система заказа блюд/src:/app/src"
-    command: npx vite --host 0.0.0.0 --port 5175
-    depends_on:
-      - backend
 
 volumes:
   pgdata:

@@ -1,0 +1,27 @@
+# ── Secrets (never commit) ─────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.keystore
+*.jks
+
+# ── Dependencies / builds ──────────────────────────────────────
+node_modules/
+dist/
+build/
+web-build/
+*.tsbuildinfo
+
+# ── Desktop (Electron) build output ────────────────────────────
+desktop/dist/
+desktop/web-build/
+
+# ── OS / editor noise ──────────────────────────────────────────
+.DS_Store
+*.log
+
+# ── Local working dirs ─────────────────────────────────────────
+_design_review/
+logo-png/
