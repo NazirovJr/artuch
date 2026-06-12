@@ -106,7 +106,7 @@ export default function NewReservationScreen({ navigation }: Props) {
       return `${yyyy}-${mm}-${dd}`;
     };
     checkReservationConflicts({
-      roomNumber: watchedRoomNumber,
+      roomNumber: Number(watchedRoomNumber),
       from: fmt(watchedCheckIn),
       to: fmt(watchedCheckOut),
     })

@@ -355,7 +355,7 @@ function AgendaView({
   return (
     <View style={styles.agendaContainer}>
       <CalendarKit
-        viewMode="threeDays"
+        numberOfDays={3}
         initialDate={date.toISOString()}
         events={events}
         onPressEvent={handleEventPress}

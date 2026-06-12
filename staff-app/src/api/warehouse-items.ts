@@ -19,6 +19,7 @@ export interface CreateWarehouseItemData {
   name: string;
   category: string;
   unit: string;
+  barcode?: string;
   quantity?: number;
   minQuantity?: number;
   parLevel?: number;

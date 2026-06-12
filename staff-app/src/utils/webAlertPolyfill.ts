@@ -36,7 +36,10 @@ export function installWebAlertPolyfill() {
   if (Platform.OS !== 'web') return;
   if (typeof window === 'undefined') return;
 
-  Alert.alert = (title: string, message?: string, buttons?: AlertButton[]) => {
+  // Cast to the exact Alert.alert type: we intentionally ignore the 4th
+  // `options` arg and use a narrower button shape, which is structurally
+  // fine for a web confirm() bridge but trips strict function-type checks.
+  Alert.alert = ((title: string, message?: string, buttons?: AlertButton[]) => {
     const text = message ? `${title}\n\n${message}` : title;
 
     const safeBtns = buttons && buttons.length > 0 ? buttons : [{ text: 'OK' }];
@@ -68,5 +71,5 @@ export function installWebAlertPolyfill() {
       // eslint-disable-next-line no-console
       console.error('[webAlertPolyfill] button handler threw', e);
     }
-  };
+  }) as typeof Alert.alert;
 }

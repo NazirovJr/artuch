@@ -1,0 +1,49 @@
+name: CI
+
+# Type-check both apps and run backend unit tests on every push/PR to master.
+# Keeps the frontend tsc green (just brought to 0 errors) and guards the
+# backend against type regressions. Lint runs but doesn't block (pre-existing
+# style warnings shouldn't fail the build).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install deps
+        run: npm install --no-audit --no-fund
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Unit tests
+        run: npm test -- --runInBand --ci
+      - name: Lint (non-blocking)
+        run: npx eslint "{src,test}/**/*.ts" || true
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: staff-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install deps
+        run: npm install --no-audit --no-fund
+      - name: Type-check
+        run: npx tsc --noEmit
