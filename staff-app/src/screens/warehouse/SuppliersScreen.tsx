@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import {
   Button,
@@ -45,9 +46,12 @@ export default function SuppliersScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Refetch on focus so the list reflects suppliers added/edited elsewhere.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const filtered = suppliers.filter((s) => {
     const q = search.trim().toLowerCase();

@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import {
   Card,
@@ -43,9 +44,12 @@ export default function ExpiringLotsScreen() {
     }
   }, [days, includeExpired]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Refetch on focus so expiry data reflects movements done elsewhere.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const renderItem = ({ item }: { item: StockLot }) => {
     const left = daysLeft(item.expiresAt);

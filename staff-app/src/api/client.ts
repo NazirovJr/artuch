@@ -116,7 +116,7 @@ export class ApiError extends Error {
 let isRefreshing = false;
 let refreshPromise: Promise<boolean> | null = null;
 
-async function tryRefreshToken(): Promise<boolean> {
+export async function tryRefreshToken(): Promise<boolean> {
   const storedRefreshToken = await getRefreshToken();
   if (!storedRefreshToken) return false;
 

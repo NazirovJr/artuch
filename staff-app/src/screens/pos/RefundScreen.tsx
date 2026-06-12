@@ -4,8 +4,10 @@ import { Card, Text, Button, TextInput, Checkbox, useTheme, Divider } from 'reac
 import { getTransactions, createRefund } from '../../api/pos';
 import { useAuthStore } from '../../store/authStore';
 import { useManagerApproval } from '../../hooks/useManagerApproval';
+import { useToast } from '../../components/ui/Toast';
 import ManagerPinDialog from '../../components/ManagerPinDialog';
 import { semantic } from '../../theme/colors';
+import { uuid } from '../../utils/uuid';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { POSStackParamList } from '../../navigation/types';
 
@@ -21,6 +23,7 @@ interface RefundItem {
 
 export default function RefundScreen({ navigation }: Props) {
   const theme = useTheme();
+  const toast = useToast();
   const { user } = useAuthStore();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -36,12 +39,12 @@ export default function RefundScreen({ navigation }: Props) {
     try {
       const data = await getTransactions();
       setTransactions(data);
-    } catch {
-      // handle error silently
+    } catch (e: any) {
+      toast.error(e?.message || 'Не удалось загрузить транзакции');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     fetchTransactions();
@@ -103,6 +106,10 @@ export default function RefundScreen({ navigation }: Props) {
       return;
     }
 
+    // Stable per-attempt key: a transport retry (outbox replay) re-sends the
+    // same body, so the backend returns the existing refund instead of
+    // issuing a second one.
+    const idempotencyKey = uuid();
     requestApproval('Возврат', async (managerPin) => {
       setSubmitting(true);
       try {
@@ -117,11 +124,14 @@ export default function RefundScreen({ navigation }: Props) {
           reason: reason.trim(),
           employeeId: user?.id || '',
           employeeName: user?.fullName || '',
+          idempotencyKey,
           managerPin,
         });
         Alert.alert('Успех', 'Возврат оформлен', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
+      } catch (e: any) {
+        toast.error(e?.message || 'Не удалось оформить возврат');
       } finally {
         setSubmitting(false);
       }

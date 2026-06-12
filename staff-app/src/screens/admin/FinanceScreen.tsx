@@ -62,7 +62,13 @@ function computeRange(key: string): { from: string; to: string } {
   return { from: from.toISOString(), to: now.toISOString() };
 }
 
-const money = (n: number) => `${Math.round(Number(n) || 0).toLocaleString('ru-RU')} TJS`;
+// Show 2 decimals so the dashboard matches the backend's decimal totals
+// (previously Math.round hid fractional TJS — e.g. 100.50 read as "101").
+const money = (n: number) =>
+  `${(Number(n) || 0).toLocaleString('ru-RU', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} TJS`;
 const pct = (n: number) => `${(Math.round((Number(n) || 0) * 10) / 10).toLocaleString('ru-RU')}%`;
 
 type ChartMetric = 'revenue' | 'count' | 'avg';

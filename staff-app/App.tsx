@@ -21,6 +21,7 @@ import { installWebAlertPolyfill } from './src/utils/webAlertPolyfill';
 import {
   getBaseUrl,
   getToken,
+  tryRefreshToken,
   registerOutboxEnqueue,
 } from './src/api/client';
 import {
@@ -79,8 +80,8 @@ export default function App() {
   useEffect(() => {
     // One-shot drain at startup, plus a NetInfo subscription that drains
     // every time we regain connectivity.
-    drainOutbox(getBaseUrl(), getToken).catch(() => {});
-    const unsub = startOutboxAutoDrain(getBaseUrl(), getToken);
+    drainOutbox(getBaseUrl(), getToken, tryRefreshToken).catch(() => {});
+    const unsub = startOutboxAutoDrain(getBaseUrl(), getToken, tryRefreshToken);
     return unsub;
   }, []);
 

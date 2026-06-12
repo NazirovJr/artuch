@@ -5,6 +5,9 @@ interface FolioState {
   folios: any[];
   currentFolio: any | null;
   loading: boolean;
+  /** Last load error (null when the last fetch succeeded). Screens can read
+   *  this to surface a message instead of silently showing stale data. */
+  error: string | null;
   fetchFolios: (status?: string) => Promise<void>;
   fetchFolio: (id: string) => Promise<void>;
   createFolio: (data: { guestId?: string; reservationId?: string; roomNumber?: number; notes?: string }) => Promise<any>;
@@ -19,26 +22,29 @@ export const useFolioStore = create<FolioState>((set, get) => ({
   folios: [],
   currentFolio: null,
   loading: false,
+  error: null,
 
   fetchFolios: async (status?: string) => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
       const folios = await folioApi.getFolios(status);
       set({ folios });
-    } catch {
-      // handle silently
+    } catch (e: any) {
+      console.warn('[folioStore] fetchFolios failed', e);
+      set({ error: e?.message || 'Не удалось загрузить счета' });
     } finally {
       set({ loading: false });
     }
   },
 
   fetchFolio: async (id: string) => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
       const folio = await folioApi.getFolio(id);
       set({ currentFolio: folio });
-    } catch {
-      // handle silently
+    } catch (e: any) {
+      console.warn('[folioStore] fetchFolio failed', e);
+      set({ error: e?.message || 'Не удалось загрузить счёт' });
     } finally {
       set({ loading: false });
     }

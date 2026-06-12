@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { Outlet } from '../api/outlets';
 
 export type PaymentMethod = 'cash' | 'card' | 'mobile' | 'folio';
 
@@ -12,7 +13,7 @@ interface CartItem {
 
 interface PosState {
   cart: CartItem[];
-  currentOutlet: any | null;
+  currentOutlet: Outlet | null;
   paymentMethod: PaymentMethod;
   /**
    * When paymentMethod='folio', this points at the open folio that should

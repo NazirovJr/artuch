@@ -118,6 +118,10 @@ let draining = false;
 export async function drainOutbox(
   baseUrl: string,
   getToken: () => Promise<string | null>,
+  /** Refresh the access token when a replay hits 401 (token expired while
+   *  offline). Called at most once per drain; on success the queue is
+   *  retried with the fresh token. Optional — without it, 401s re-queue. */
+  tryRefresh?: () => Promise<boolean>,
 ): Promise<{ sent: number; dropped: number; remaining: number }> {
   if (draining) return { sent: 0, dropped: 0, remaining: 0 };
   draining = true;
@@ -127,7 +131,8 @@ export async function drainOutbox(
   try {
     const items = await loadOutbox();
     const remaining: OutboxItem[] = [];
-    const token = await getToken();
+    let token = await getToken();
+    let refreshed = false; // only attempt one refresh per drain
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -135,18 +140,35 @@ export async function drainOutbox(
 
     for (const item of items) {
       try {
-        const res = await fetch(`${baseUrl}${item.path}`, {
+        let res = await fetch(`${baseUrl}${item.path}`, {
           method: item.method,
           headers,
           body: item.body ?? undefined,
         });
+
+        // Token expired while offline → refresh once, then retry this item
+        // with the new token before deciding its fate.
+        if (res.status === 401 && tryRefresh && !refreshed) {
+          refreshed = true;
+          const ok = await tryRefresh();
+          if (ok) {
+            token = await getToken();
+            if (token) headers.Authorization = `Bearer ${token}`;
+            res = await fetch(`${baseUrl}${item.path}`, {
+              method: item.method,
+              headers,
+              body: item.body ?? undefined,
+            });
+          }
+        }
+
         if (res.ok || res.status === 204) {
           sent += 1;
           continue;
         }
-        // 4xx (except 401 which we re-queue once for token refresh elsewhere)
-        // means the server actively rejected the mutation. Replay won't fix
-        // it — drop and let the user investigate.
+        // 4xx (except 401, which means auth is genuinely gone — re-queue so a
+        // later login can flush) means the server rejected the mutation.
+        // Replay won't fix it — drop and let the user investigate.
         if (res.status >= 400 && res.status < 500 && res.status !== 401) {
           dropped += 1;
           continue;
@@ -187,10 +209,11 @@ export async function drainOutbox(
 export function startOutboxAutoDrain(
   baseUrl: string,
   getToken: () => Promise<string | null>,
+  tryRefresh?: () => Promise<boolean>,
 ): () => void {
   return NetInfo.addEventListener((state) => {
     if (state.isConnected && state.isInternetReachable !== false) {
-      drainOutbox(baseUrl, getToken).catch(() => {
+      drainOutbox(baseUrl, getToken, tryRefresh).catch(() => {
         // Errors during drain are recorded onto each item; the next round
         // will pick them up.
       });

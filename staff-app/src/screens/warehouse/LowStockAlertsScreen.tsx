@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import {
   Button,
@@ -40,9 +41,12 @@ export default function LowStockAlertsScreen() {
     }
   }, [tab]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Refetch on focus so alerts reflect restocks done elsewhere.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const handleAck = async (alert: LowStockAlert) => {
     if (!user) return;

@@ -3,6 +3,7 @@ import { View, FlatList, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Card, Text, Button, Divider, useTheme } from 'react-native-paper';
 import { getFolio, closeFolio } from '../../api/folios';
 import StatusBadge from '../../components/ui/StatusBadge';
+import { useToast } from '../../components/ui/Toast';
 import { semantic } from '../../theme/colors';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RoomsStackParamList } from '../../navigation/types';
@@ -29,6 +30,7 @@ export default function FolioDetailScreen({ route, navigation, folioIdOverride }
   // Supports both route-driven (phone push) and prop-driven (tablet split) modes.
   const folioId = folioIdOverride ?? route?.params?.folioId;
   const theme = useTheme();
+  const toast = useToast();
   const [folio, setFolio] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
@@ -43,12 +45,12 @@ export default function FolioDetailScreen({ route, navigation, folioIdOverride }
     try {
       const data = await getFolio(folioId);
       setFolio(data);
-    } catch {
-      // handle silently
+    } catch (e: any) {
+      toast.error(e?.message || 'Не удалось загрузить фолио');
     } finally {
       setLoading(false);
     }
-  }, [folioId]);
+  }, [folioId, toast]);
 
   useEffect(() => {
     fetchFolio();

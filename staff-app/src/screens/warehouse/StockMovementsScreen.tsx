@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import {
   Card,
@@ -67,9 +68,13 @@ export default function StockMovementsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Refetch on focus so movements are fresh after a receive / sale / transfer
+  // performed on another screen.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const filtered = movements.filter((m) => {
     if (filter === 'in' && !POSITIVE_TYPES.has(m.type)) return false;
