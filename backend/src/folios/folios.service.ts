@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Folio } from './entities/folio.entity';
 import { FolioCharge } from './entities/folio-charge.entity';
 import { Guest } from '../hotel/entities/guest.entity';
@@ -13,9 +13,45 @@ export class FoliosService {
     @InjectRepository(Folio) private folioRepo: Repository<Folio>,
     @InjectRepository(FolioCharge) private chargeRepo: Repository<FolioCharge>,
     @InjectRepository(Guest) private guestRepo: Repository<Guest>,
+    @InjectDataSource() private dataSource: DataSource,
     private eventsService: EventsService,
     private outbound: OutboundMessageService,
   ) {}
+
+  /**
+   * Persist a charge and recompute the folio balance ATOMICALLY.
+   *
+   * Why a transaction + pessimistic lock: previously each add* method did
+   * `save(charge)` then a separate `recalculate()` that re-read all charges
+   * and overwrote the folio total. Two concurrent charges to the SAME folio
+   * could interleave so one recalculate read a stale set and clobbered the
+   * other's update (lost-update → wrong balance). Locking the folio row
+   * serializes per-folio mutations; the closed-check moves inside the lock
+   * so a charge can't slip onto a folio being closed concurrently.
+   *
+   * Returns the saved charge plus the folio total BEFORE recalculation (so
+   * callers like addDiscount can compute a ratio against the prior total).
+   */
+  private async persistCharge(
+    folioId: string,
+    action: 'charge' | 'payment' | 'deposit' | 'discount',
+    build: () => FolioCharge,
+  ): Promise<{ charge: FolioCharge; folioTotalBefore: number }> {
+    return this.dataSource.transaction(async (mgr) => {
+      const folio = await mgr.findOne(Folio, {
+        where: { id: folioId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!folio) throw new NotFoundException('Folio not found');
+      if (folio.status === 'closed') {
+        throw new BadRequestException(`Cannot add ${action} to a closed folio`);
+      }
+      const folioTotalBefore = Number(folio.totalAmount) || 0;
+      const charge = await mgr.save(FolioCharge, build());
+      await this.recalculate(mgr, folioId);
+      return { charge, folioTotalBefore };
+    });
+  }
 
   async findAll(status?: string): Promise<Folio[]> {
     const where: any = {};
@@ -77,24 +113,19 @@ export class FoliosService {
       unitPrice?: number;
     },
   ): Promise<FolioCharge> {
-    const folio = await this.findById(folioId);
-    if (folio.status === 'closed') {
-      throw new BadRequestException('Cannot add charge to a closed folio');
-    }
-
-    const charge = this.chargeRepo.create({
-      folioId,
-      chargeType: data.chargeType,
-      description: data.description,
-      amount: Math.abs(data.amount), // charges are positive
-      sourceId: data.sourceId || undefined,
-      addedBy: data.addedBy,
-      quantity: data.quantity ?? null,
-      unitPrice: data.unitPrice ?? null,
-    });
-    const saved = await this.chargeRepo.save(charge);
-    await this.recalculate(folioId);
-    return saved;
+    const { charge } = await this.persistCharge(folioId, 'charge', () =>
+      this.chargeRepo.create({
+        folioId,
+        chargeType: data.chargeType,
+        description: data.description,
+        amount: Math.abs(data.amount), // charges are positive
+        sourceId: data.sourceId || undefined,
+        addedBy: data.addedBy,
+        quantity: data.quantity ?? null,
+        unitPrice: data.unitPrice ?? null,
+      }),
+    );
+    return charge;
   }
 
   /**
@@ -108,41 +139,32 @@ export class FoliosService {
     folioId: string,
     data: { amount: number; addedBy: string; description?: string },
   ): Promise<FolioCharge> {
-    const folio = await this.findById(folioId);
-    if (folio.status === 'closed') {
-      throw new BadRequestException('Cannot add deposit to a closed folio');
-    }
-    const charge = this.chargeRepo.create({
-      folioId,
-      chargeType: 'deposit',
-      description: data.description || 'Депозит',
-      amount: -Math.abs(data.amount),
-      addedBy: data.addedBy,
-    });
-    const saved = await this.chargeRepo.save(charge);
-    await this.recalculate(folioId);
-    return saved;
+    const { charge } = await this.persistCharge(folioId, 'deposit', () =>
+      this.chargeRepo.create({
+        folioId,
+        chargeType: 'deposit',
+        description: data.description || 'Депозит',
+        amount: -Math.abs(data.amount),
+        addedBy: data.addedBy,
+      }),
+    );
+    return charge;
   }
 
   async addPayment(
     folioId: string,
     data: { amount: number; addedBy: string; description?: string },
   ): Promise<FolioCharge> {
-    const folio = await this.findById(folioId);
-    if (folio.status === 'closed') {
-      throw new BadRequestException('Cannot add payment to a closed folio');
-    }
-
-    const charge = this.chargeRepo.create({
-      folioId,
-      chargeType: 'payment',
-      description: data.description || 'Оплата',
-      amount: -Math.abs(data.amount), // payments are negative
-      addedBy: data.addedBy,
-    });
-    const saved = await this.chargeRepo.save(charge);
-    await this.recalculate(folioId);
-    return saved;
+    const { charge } = await this.persistCharge(folioId, 'payment', () =>
+      this.chargeRepo.create({
+        folioId,
+        chargeType: 'payment',
+        description: data.description || 'Оплата',
+        amount: -Math.abs(data.amount), // payments are negative
+        addedBy: data.addedBy,
+      }),
+    );
+    return charge;
   }
 
   async addDiscount(
@@ -154,27 +176,25 @@ export class FoliosService {
       approval?: { userId: string; reason: string; approvedAt: Date };
     },
   ): Promise<FolioCharge> {
-    const folio = await this.findById(folioId);
-    if (folio.status === 'closed') {
-      throw new BadRequestException('Cannot add discount to a closed folio');
-    }
-
-    const charge = this.chargeRepo.create({
+    const { charge, folioTotalBefore } = await this.persistCharge(
       folioId,
-      chargeType: 'discount',
-      description: data.description || 'Скидка',
-      amount: -Math.abs(data.amount), // discounts are negative
-      addedBy: data.addedBy,
-      approvedBy: data.approval?.userId,
-      approvedAt: data.approval?.approvedAt ?? null,
-      approvalReason: data.approval?.reason,
-    });
-    const saved = await this.chargeRepo.save(charge);
-    await this.recalculate(folioId);
+      'discount',
+      () =>
+        this.chargeRepo.create({
+          folioId,
+          chargeType: 'discount',
+          description: data.description || 'Скидка',
+          amount: -Math.abs(data.amount), // discounts are negative
+          addedBy: data.addedBy,
+          approvedBy: data.approval?.userId,
+          approvedAt: data.approval?.approvedAt ?? null,
+          approvalReason: data.approval?.reason,
+        }),
+    );
 
     const amount = Math.abs(data.amount);
-    const folioTotal = Number(folio.totalAmount) || 0;
-    const ratio = folioTotal > 0 ? amount / folioTotal : 0;
+    // Ratio against the total BEFORE the discount applied (severity scaling).
+    const ratio = folioTotalBefore > 0 ? amount / folioTotalBefore : 0;
     this.eventsService.emitRiskyAction({
       type: 'discount',
       severity: ratio >= 0.2 ? 'warning' : 'info',
@@ -186,7 +206,7 @@ export class FoliosService {
       subject: 'Folio',
     });
 
-    return saved;
+    return charge;
   }
 
   async close(folioId: string): Promise<Folio> {
@@ -229,8 +249,17 @@ export class FoliosService {
     };
   }
 
-  private async recalculate(folioId: string): Promise<void> {
-    const charges = await this.chargeRepo.find({ where: { folioId } });
+  /**
+   * Recompute folio totals from its charges. MUST run inside the same
+   * transaction (and after the folio row is locked) as the charge insert —
+   * the caller `persistCharge` guarantees this so the read-modify-write is
+   * serialized per folio.
+   */
+  private async recalculate(
+    mgr: EntityManager,
+    folioId: string,
+  ): Promise<void> {
+    const charges = await mgr.find(FolioCharge, { where: { folioId } });
 
     let totalAmount = 0;
     let paidAmount = 0;
@@ -252,7 +281,7 @@ export class FoliosService {
       }
     }
 
-    await this.folioRepo.update(folioId, {
+    await mgr.update(Folio, folioId, {
       totalAmount: Math.max(0, totalAmount),
       paidAmount,
     });

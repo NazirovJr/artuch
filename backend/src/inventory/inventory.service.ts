@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
@@ -51,6 +52,8 @@ const DECREMENT_TYPES: ReadonlySet<InventoryMovementType> = new Set([
 
 @Injectable()
 export class InventoryService {
+  private readonly logger = new Logger(InventoryService.name);
+
   constructor(
     @InjectRepository(InventoryItem)
     private itemsRepo: Repository<InventoryItem>,
@@ -266,7 +269,19 @@ export class InventoryService {
         where: itemId ? { id: itemId } : { name: itemName },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!item) return;
+      if (!item) {
+        // A caller that passed a concrete itemId expected a real stock row —
+        // its absence means a sale was recorded without deducting stock
+        // (theoretical vs actual drift). Surface it. A name-only lookup
+        // missing is normal for services / ad-hoc lines, so stay quiet there.
+        if (itemId) {
+          this.logger.warn(
+            `decrementStock: itemId=${itemId} ("${itemName}") not found — ` +
+              `sale recorded but stock NOT decremented (possible drift).`,
+          );
+        }
+        return;
+      }
       const decrementBy = this.toStockUnits(item, quantity);
       if (item.stock - decrementBy < 0) {
         throw new BadRequestException(

@@ -26,10 +26,12 @@ async function bootstrap() {
   });
   app.useGlobalPipes(
     new ValidationPipe({
+      // Strip unknown fields so garbage/probing never reaches the DB. We
+      // deliberately do NOT set `forbidNonWhitelisted` globally: flipping
+      // silent-strip to a hard 400 on a live system risks breaking any form
+      // that sends an extra field. Enable it per-endpoint after auditing
+      // each DTO's real payload.
       whitelist: true,
-      // Reject (don't silently strip) unexpected fields — surfaces typos
-      // and probing early instead of accepting malformed payloads.
-      forbidNonWhitelisted: true,
       transform: true,
     }),
   );

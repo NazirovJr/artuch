@@ -35,6 +35,28 @@ export class PosService {
       throw new NotFoundException('employeeId is required');
     }
 
+    // Guard the money-shaped fields before they hit the DB. Previously the
+    // raw `any` body was saved blind, so a malformed payload could persist a
+    // NaN/negative total or an empty sale. (Lightweight inline checks instead
+    // of a strict DTO, which — with whitelist stripping — risked silently
+    // dropping fields like items[].volume.)
+    const total = Number(data.total);
+    if (!Number.isFinite(total) || total < 0) {
+      throw new BadRequestException('total must be a non-negative number');
+    }
+    if (!Array.isArray(data.items) || data.items.length === 0) {
+      throw new BadRequestException('items must be a non-empty array');
+    }
+    for (const line of data.items) {
+      const price = Number(line?.price);
+      const qty = Number(line?.quantity);
+      if (!line?.name || !Number.isFinite(price) || !Number.isFinite(qty) || qty <= 0) {
+        throw new BadRequestException(
+          'each item needs a name, a numeric price and a positive quantity',
+        );
+      }
+    }
+
     // Two paths depending on payment method:
     //   cash / card / mobile → cashier's active shift is required (money
     //     moves through the till, variance must account for it).
@@ -70,11 +92,14 @@ export class PosService {
       }
     }
 
+    // Cast the spread to a single Partial<Transaction> so TypeORM's `create`
+    // resolves to the single-entity overload (a raw `any` arg makes it infer
+    // Transaction[]). This replaces the old `save(...) as any`.
     const transaction = this.transRepo.create({
       ...data,
       ...(shiftId ? { shiftId } : {}),
-    });
-    const saved: Transaction = await (this.transRepo.save(transaction) as any);
+    } as Partial<Transaction>);
+    const saved = await this.transRepo.save(transaction);
 
     // Decrement stock for each sold item — folio-billed goods still leave
     // the shelf, so this runs regardless of payment method.
@@ -128,8 +153,19 @@ export class PosService {
     employeeId: string;
     employeeName: string;
     folioId?: string;
+    idempotencyKey?: string;
     approval?: { userId: string; reason: string; approvedAt: Date };
   }): Promise<Refund> {
+    // Idempotency: a retried/double-tapped refund reuses the same key, so we
+    // return the already-created refund instead of issuing a second one
+    // (which would double the money out, flip status twice, re-emit alerts).
+    if (data.idempotencyKey) {
+      const existing = await this.refundRepo.findOne({
+        where: { idempotencyKey: data.idempotencyKey },
+      });
+      if (existing) return existing;
+    }
+
     const transaction = await this.transRepo.findOne({
       where: { id: data.transactionId },
       relations: ['items'],

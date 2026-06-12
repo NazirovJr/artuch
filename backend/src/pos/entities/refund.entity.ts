@@ -1,10 +1,18 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { Transaction } from './transaction.entity';
 
 @Entity('refunds')
 export class Refund {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  // Client-supplied dedup key. A retried refund (network double-send or a
+  // double-tap) reuses the same key, so the unique index lets the service
+  // return the existing refund instead of creating a second one. Nullable
+  // for backward-compat with historical rows / callers without a key.
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  @Index()
+  idempotencyKey: string | null;
 
   @Column()
   transactionId: string;
