@@ -8,7 +8,14 @@ const path = require('path');
 const http = require('http');
 const handler = require('serve-handler');
 
-const WEB_ROOT = path.join(__dirname, 'web-build');
+// web-build ships via extraResources (NOT inside the asar): electron-builder
+// silently strips any path containing `node_modules` from the asar, and the
+// Expo export keeps its fonts under web-build/assets/node_modules/... — that
+// stripping is exactly why icons rendered as empty boxes in packaged builds.
+// extraResources copies the tree verbatim into <app>/resources/web-build.
+const WEB_ROOT = app.isPackaged
+  ? path.join(process.resourcesPath, 'web-build')
+  : path.join(__dirname, 'web-build');
 let server = null;
 
 function startServer() {

@@ -27,8 +27,14 @@
     },
     "files": [
       "main.js",
-      "web-build/**/*",
+      "build/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "web-build",
+        "to": "web-build"
+      }
     ],
     "publish": [
       {
