@@ -45,8 +45,14 @@
     ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": ["x64", "ia32"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64", "ia32"]
+        }
       ]
     },
     "nsis": {
@@ -55,10 +61,10 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "shortcutName": "Artuch Staff",
-      "artifactName": "ArtuchStaff-Setup-${version}.${ext}"
+      "artifactName": "ArtuchStaff-Setup-${version}-${arch}.${ext}"
     },
     "portable": {
-      "artifactName": "ArtuchStaff-Portable-${version}.${ext}"
+      "artifactName": "ArtuchStaff-Portable-${version}-${arch}.${ext}"
     }
   }
 }
