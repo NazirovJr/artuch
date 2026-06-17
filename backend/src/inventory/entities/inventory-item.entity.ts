@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   VersionColumn,
+  Index,
 } from 'typeorm';
 
 @Entity('inventory_items')
@@ -25,6 +26,7 @@ export class InventoryItem {
   category: string;
 
   @Column({ length: 50, nullable: true })
+  @Index()
   barcode: string;
 
   @Column({ default: 0 })

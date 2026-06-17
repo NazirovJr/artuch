@@ -9,6 +9,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AlertsService } from '../alerts/alerts.service';
 import { mirrorIdempotencyKey } from '../common/deterministic-uuid';
+import { normalizeBarcode, isBlankBarcode } from '../common/barcode';
 import { StockMovementType } from '../stock/entities/stock-movement.entity';
 import { StockService } from '../stock/stock.service';
 import { InventoryItem } from './entities/inventory-item.entity';
@@ -164,7 +165,54 @@ export class InventoryService {
     return this.itemsRepo.findOne({ where: { name } });
   }
 
+  /**
+   * Resolve a scanned/typed barcode to the single sellable item. Normalizes
+   * first (so scanner CR/LF and case don't matter), then — if codes collide —
+   * prefers an active, in-stock item and logs a warning so the duplicate is
+   * visible. Returns null when nothing matches (caller maps to 404 / "create").
+   */
+  async findItemByBarcode(barcode: string): Promise<InventoryItem | null> {
+    const code = normalizeBarcode(barcode);
+    if (!code) return null;
+    const matches = await this.itemsRepo.find({ where: { barcode: code } });
+    if (matches.length === 0) return null;
+    if (matches.length === 1) return matches[0];
+    this.logger.warn(
+      `Barcode "${code}" maps to ${matches.length} items — preferring active/in-stock`,
+    );
+    return (
+      matches.find((m) => m.isActive && m.stock > 0) ??
+      matches.find((m) => m.isActive) ??
+      matches[0]
+    );
+  }
+
+  /**
+   * Reject a barcode already owned by a different active item — InventoryItem
+   * is global (POS sells from it) so a code must resolve to exactly one item.
+   * Blank barcodes are allowed and skip the check.
+   */
+  private async assertBarcodeUnique(
+    code: string,
+    excludeId?: string,
+  ): Promise<void> {
+    const clash = await this.itemsRepo.findOne({
+      where: { barcode: code, isActive: true },
+    });
+    if (clash && clash.id !== excludeId) {
+      throw new ConflictException(
+        `Штрихкод "${code}" уже привязан к «${clash.name}»`,
+      );
+    }
+  }
+
   async createItem(data: Partial<InventoryItem>): Promise<InventoryItem> {
+    if (!isBlankBarcode(data.barcode)) {
+      data.barcode = normalizeBarcode(data.barcode);
+      await this.assertBarcodeUnique(data.barcode);
+    } else {
+      data.barcode = undefined;
+    }
     const item = this.itemsRepo.create(data);
     return this.itemsRepo.save(item);
   }
@@ -174,6 +222,14 @@ export class InventoryService {
     data: Partial<InventoryItem>,
   ): Promise<InventoryItem> {
     const item = await this.findItemById(id);
+    if (data.barcode !== undefined) {
+      if (isBlankBarcode(data.barcode)) {
+        data.barcode = null as any;
+      } else {
+        data.barcode = normalizeBarcode(data.barcode);
+        await this.assertBarcodeUnique(data.barcode, id);
+      }
+    }
     Object.assign(item, data);
     return this.itemsRepo.save(item);
   }

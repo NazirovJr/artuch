@@ -19,6 +19,7 @@ import {
 } from './entities/warehouse-transaction.entity';
 import { CreateWarehouseTransactionDto } from './dto/create-warehouse-transaction.dto';
 import { CreateWarehouseItemDto } from './dto/create-warehouse-item.dto';
+import { normalizeBarcode, isBlankBarcode } from '../common/barcode';
 
 const WAREHOUSE_TYPE_TO_STOCK: Record<
   WarehouseTransactionType,
@@ -287,7 +288,9 @@ export class WarehouseService {
         name: dto.name,
         category: dto.category,
         unit: dto.unit,
-        barcode: dto.barcode || undefined,
+        barcode: isBlankBarcode(dto.barcode)
+          ? undefined
+          : normalizeBarcode(dto.barcode),
         quantity: dto.quantity ?? 0,
         minQuantity: dto.minQuantity ?? 0,
         parLevel: dto.parLevel ?? 0,
@@ -338,7 +341,9 @@ export class WarehouseService {
     barcode: string,
     warehouseId?: string,
   ): Promise<WarehouseItem | null> {
-    const where: any = { barcode };
+    const code = normalizeBarcode(barcode);
+    if (!code) return null;
+    const where: any = { barcode: code };
     if (warehouseId) where.warehouseId = warehouseId;
     return this.itemsRepo.findOne({ where });
   }

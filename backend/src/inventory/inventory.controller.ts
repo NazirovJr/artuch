@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -39,6 +40,18 @@ export class InventoryController {
   @Audit('create', 'InventoryMovement')
   addMovement(@Body() body: any) {
     return this.inventoryService.addMovement(body);
+  }
+
+  // Barcode lookup for POS scan-to-sell. MUST stay before `:id` so
+  // "lookup" isn't captured as an item id. 404 → client maps to null.
+  @Get('lookup')
+  @CheckPolicies((ability) => ability.can('read', 'InventoryItem'))
+  async lookupByBarcode(@Query('barcode') barcode: string) {
+    const item = await this.inventoryService.findItemByBarcode(barcode);
+    if (!item) {
+      throw new NotFoundException(`No item with barcode "${barcode}"`);
+    }
+    return item;
   }
 
   @Get(':id')
