@@ -28,7 +28,7 @@ type Props = NativeStackScreenProps<WarehouseStackParamList, 'NewWarehouseItem'>
 const UNIT_PRESETS = ['кг', 'г', 'л', 'мл', 'шт', 'упак', 'м'];
 
 export default function NewWarehouseItemScreen({ route, navigation }: Props) {
-  const { warehouseId } = route.params;
+  const { warehouseId, barcode: scannedBarcode } = route.params;
   const theme = useTheme();
   const toast = useToast();
 
@@ -41,7 +41,8 @@ export default function NewWarehouseItemScreen({ route, navigation }: Props) {
   const [minQty, setMinQty] = useState('');
   const [parLevel, setParLevel] = useState('');
   const [reorderPoint, setReorderPoint] = useState('');
-  const [barcode, setBarcode] = useState('');
+  // Prefill the barcode when arriving from a "not found" scan.
+  const [barcode, setBarcode] = useState(scannedBarcode ?? '');
   const [saving, setSaving] = useState(false);
 
   const loadCategories = useCallback(async () => {

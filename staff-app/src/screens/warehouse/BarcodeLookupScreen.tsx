@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import { Card, HelperText, Text } from 'react-native-paper';
+import { Button, Card, HelperText, Text } from 'react-native-paper';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import BarcodeInput from '../../components/BarcodeInput';
 import ScreenContainer from '../../components/ui/ScreenContainer';
@@ -63,10 +63,25 @@ export default function BarcodeLookupScreen({ route, navigation }: Props) {
               <Text variant="labelSmall">Последний код</Text>
               <Text variant="titleMedium">{lastScanned}</Text>
               {notFound && (
-                <HelperText type="error" visible style={styles.helper}>
-                  Не найдено в этом складе. Создайте товар или назначьте ему
-                  штрихкод.
-                </HelperText>
+                <>
+                  <HelperText type="error" visible style={styles.helper}>
+                    Не найдено в этом складе. Создайте товар или назначьте ему
+                    штрихкод.
+                  </HelperText>
+                  <Button
+                    mode="contained-tonal"
+                    icon="plus"
+                    style={styles.createBtn}
+                    onPress={() =>
+                      navigation.navigate('NewWarehouseItem', {
+                        warehouseId,
+                        barcode: lastScanned ?? undefined,
+                      })
+                    }
+                  >
+                    Создать товар
+                  </Button>
+                </>
               )}
               {lastResult && (
                 <Text style={styles.matched}>
@@ -88,4 +103,5 @@ const styles = StyleSheet.create({
   resultCard: { marginTop: 16 },
   matched: { marginTop: 8, fontWeight: '600' },
   helper: { paddingHorizontal: 0 },
+  createBtn: { marginTop: 8, alignSelf: 'flex-start' },
 });

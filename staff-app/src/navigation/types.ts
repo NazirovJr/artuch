@@ -76,7 +76,7 @@ export type CleaningStackParamList = {
 export type WarehouseStackParamList = {
   WarehouseList: undefined;
   WarehouseDetail: { warehouseId: string };
-  NewWarehouseItem: { warehouseId: string };
+  NewWarehouseItem: { warehouseId: string; barcode?: string };
   ReceiveStock: {
     warehouseId: string;
     itemId?: string;
