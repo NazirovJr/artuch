@@ -3,13 +3,19 @@ import { View, FlatList, StyleSheet, RefreshControl } from 'react-native';
 import { Card, Text, Chip, Button, Badge, useTheme, IconButton } from 'react-native-paper';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
-import { getInventoryItems as getInventory } from '../../api/inventory';
+import {
+  getInventoryItems as getInventory,
+  getInventoryItemByBarcode,
+} from '../../api/inventory';
 import { usePosStore } from '../../store/posStore';
 import { useAuthStore } from '../../store/authStore';
 import { useShiftStore } from '../../store/shiftStore';
 import EmptyState from '../../components/ui/EmptyState';
 import LoadingSkeleton from '../../components/ui/LoadingSkeleton';
+import BarcodeInput from '../../components/BarcodeInput';
 import { useToast } from '../../components/ui/Toast';
+import { useHaptics } from '../../hooks/useHaptics';
+import { normalizeBarcode } from '../../utils/barcode';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { rv } from '../../utils/responsive';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -90,6 +96,40 @@ export default function POSScreen({ navigation }: Props) {
       quantity: 1,
     });
   };
+
+  const haptics = useHaptics();
+
+  // Scan-to-sell: a USB/Bluetooth wedge (or manual entry) fires this.
+  // Resolve against the already-loaded inventory first (instant), fall back
+  // to the server lookup for items filtered out of the current view.
+  const handleScan = useCallback(
+    async (raw: string): Promise<boolean> => {
+      const code = normalizeBarcode(raw);
+      if (!code) return false;
+      let item = inventory.find((i) => i.barcode && normalizeBarcode(i.barcode) === code);
+      if (!item) {
+        try {
+          item = (await getInventoryItemByBarcode(code)) ?? undefined;
+        } catch {
+          toast.show('Ошибка поиска штрихкода', 'error');
+          return false;
+        }
+      }
+      if (!item) {
+        toast.show(`Штрихкод не найден: ${code}`, 'error');
+        return true; // clear the field for the next scan
+      }
+      handleAddToCart(item);
+      haptics.light();
+      if (item.stock <= 0) {
+        toast.show(`«${item.name}» — нет на складе`, 'warning');
+      } else {
+        toast.show(`«${item.name}» +1`, 'success');
+      }
+      return true;
+    },
+    [inventory, toast, haptics],
+  );
 
   const renderProduct = ({ item, index }: { item: any; index: number }) => {
     const qty = getCartQuantity(item.id);
@@ -177,6 +217,11 @@ export default function POSScreen({ navigation }: Props) {
         />
       </View>
 
+      {/* Barcode scan-to-sell: USB/BT wedge or manual entry → +1 to cart */}
+      <View style={styles.scanRow}>
+        <BarcodeInput onResolve={handleScan} placeholder="Сканируйте товар" />
+      </View>
+
       {/* Category filter chips */}
       <View style={styles.filterRow}>
         <Chip
@@ -255,6 +300,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
+  scanRow: { paddingHorizontal: 12, paddingBottom: 8 },
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: 12,

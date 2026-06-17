@@ -16,15 +16,18 @@ import { useFocusEffect } from '@react-navigation/native';
 import ScreenContainer from '../../components/ui/ScreenContainer';
 import EmptyState from '../../components/ui/EmptyState';
 import AnimatedListItem from '../../components/ui/AnimatedListItem';
-import { getInventoryItems } from '../../api/inventory';
+import BarcodeInput from '../../components/BarcodeInput';
+import { getInventoryItems, getInventoryItemByBarcode } from '../../api/inventory';
 import type { InventoryItem } from '../../api/inventory';
 import { getOutlets } from '../../api/outlets';
 import { createTransaction } from '../../api/pos';
 import { getFolios, type Folio } from '../../api/folios';
 import { semantic } from '../../theme/colors';
+import { normalizeBarcode } from '../../utils/barcode';
 import { useAuthStore } from '../../store/authStore';
 import { useShiftStore } from '../../store/shiftStore';
 import { useToast } from '../../components/ui/Toast';
+import { useHaptics } from '../../hooks/useHaptics';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BarStackParamList } from '../../navigation/types';
 
@@ -43,6 +46,7 @@ const PAYMENT_METHODS = [
 export default function BarSaleScreen({ navigation }: Props) {
   const theme = useTheme();
   const toast = useToast();
+  const haptics = useHaptics();
   const user = useAuthStore((s) => s.user);
   const activeShift = useShiftStore((s) => s.active);
   const refreshShift = useShiftStore((s) => s.refresh);
@@ -125,6 +129,32 @@ export default function BarSaleScreen({ navigation }: Props) {
       return next;
     });
   }, []);
+
+  // Scan-to-sell: resolve against loaded inventory, fall back to server.
+  const handleScan = useCallback(
+    async (raw: string): Promise<boolean> => {
+      const code = normalizeBarcode(raw);
+      if (!code) return false;
+      let item = inventory.find((i) => i.barcode && normalizeBarcode(i.barcode) === code);
+      if (!item) {
+        try {
+          item = (await getInventoryItemByBarcode(code)) ?? undefined;
+        } catch {
+          toast.show('Ошибка поиска штрихкода', 'error');
+          return false;
+        }
+      }
+      if (!item) {
+        toast.show(`Штрихкод не найден: ${code}`, 'error');
+        return true;
+      }
+      setQty(item, 1);
+      haptics.light();
+      toast.show(`«${item.name}» +1`, 'success');
+      return true;
+    },
+    [inventory, setQty, toast, haptics],
+  );
 
   const handleCheckout = async () => {
     if (cart.size === 0) return;
@@ -222,6 +252,11 @@ export default function BarSaleScreen({ navigation }: Props) {
 
   return (
     <ScreenContainer>
+      {/* Barcode scan-to-sell */}
+      <View style={styles.scanRow}>
+        <BarcodeInput onResolve={handleScan} placeholder="Сканируйте товар" autoFocus={false} />
+      </View>
+
       {/* Category filter */}
       <FlatList
         horizontal
@@ -370,6 +405,7 @@ export default function BarSaleScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  scanRow: { paddingHorizontal: 12, paddingTop: 8 },
   catList: { paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
   cat: { marginRight: 4 },
   grid: { padding: 12, paddingBottom: 100 },

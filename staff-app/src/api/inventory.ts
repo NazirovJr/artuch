@@ -1,4 +1,4 @@
-import { apiFetch } from './client';
+import { ApiError, apiFetch } from './client';
 
 export interface InventoryItem {
   id: string;
@@ -54,4 +54,22 @@ export function receiveFromWarehouse(
     method: 'POST',
     body: JSON.stringify({ quantity }),
   });
+}
+
+/**
+ * Resolve a scanned/typed barcode to a sellable item. Returns null on 404
+ * (unknown code) so the caller can offer "create item". Server normalizes
+ * the code, so client-side trimming isn't required.
+ */
+export async function getInventoryItemByBarcode(
+  barcode: string,
+): Promise<InventoryItem | null> {
+  try {
+    return await apiFetch<InventoryItem>(
+      `/inventory/lookup?barcode=${encodeURIComponent(barcode)}`,
+    );
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
 }
