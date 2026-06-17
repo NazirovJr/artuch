@@ -19,6 +19,7 @@ import {
   getWarehouseItems,
 } from '../../api/warehouse-items';
 import { getWarehouseById, Warehouse } from '../../api/warehouses';
+import { printBarcodeLabels } from '../../utils/printLabels';
 import type { WarehouseStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<WarehouseStackParamList, 'WarehouseDetail'>;
@@ -74,6 +75,22 @@ export default function WarehouseDetailScreen({ route, navigation }: Props) {
       return true;
     });
   }, [items, search, filter]);
+
+  const handlePrintLabel = useCallback(async (item: WarehouseItem) => {
+    try {
+      await printBarcodeLabels([
+        {
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          barcode: item.barcode,
+          copies: 1,
+        },
+      ]);
+    } catch (e: any) {
+      Alert.alert('Печать', e.message || 'Не удалось напечатать этикетку');
+    }
+  }, []);
 
   const renderItem = ({ item }: { item: WarehouseItem }) => {
     const ropEffective =
@@ -131,6 +148,11 @@ export default function WarehouseDetailScreen({ route, navigation }: Props) {
                     itemName: item.name,
                   })
                 }
+              />
+              <IconButton
+                {...props}
+                icon="barcode"
+                onPress={() => handlePrintLabel(item)}
               />
             </View>
           )}

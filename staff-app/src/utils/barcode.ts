@@ -19,3 +19,16 @@ export function normalizeBarcode(raw: string | null | undefined): string {
   }
   return out.replace(/\s+/g, ' ').trim().toUpperCase();
 }
+
+/**
+ * Internal barcode for an item without a manufacturer code, so it can still
+ * get a printed, scannable label. Mirrors the backend `generateInternalBarcode`
+ * (backend/src/common/barcode.ts): `ART` + 10 hex digits of the item id.
+ */
+export function generateInternalBarcode(itemId: string): string {
+  const hex = String(itemId)
+    .replace(/[^a-fA-F0-9]/g, '')
+    .slice(0, 10)
+    .toUpperCase();
+  return `ART${hex.padStart(10, '0')}`;
+}
