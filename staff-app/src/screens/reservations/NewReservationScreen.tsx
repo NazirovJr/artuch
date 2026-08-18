@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Button, Text, useTheme, Divider } from 'react-native-paper';
+import { Button, Dialog, Portal, Text, useTheme, Divider } from 'react-native-paper';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { z } from 'zod';
 import { getRooms } from '../../api/rooms';
-import { getGuests } from '../../api/guests';
+import { createGuest, getGuests } from '../../api/guests';
 import {
   checkReservationConflicts,
   createReservation,
@@ -23,8 +24,14 @@ import {
   type NewReservationForm,
   type NewReservationInput,
 } from '../../schemas/reservation';
+import { guestSchema, type GuestForm } from '../../schemas/guest';
+import { maskPhone } from '../../utils/inputMask';
 
 type Props = NativeStackScreenProps<RoomsStackParamList, 'NewReservation'>;
+
+// Two type params because guestSchema uses `preprocess` (input is
+// `unknown`, output is the typed shape) — mirrors GuestFormScreen's setup.
+type GuestFormInput = z.input<typeof guestSchema>;
 
 export default function NewReservationScreen({ navigation }: Props) {
   const theme = useTheme();
@@ -34,8 +41,10 @@ export default function NewReservationScreen({ navigation }: Props) {
   const [loadingData, setLoadingData] = useState(true);
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [checkingConflicts, setCheckingConflicts] = useState(false);
+  const [guestDialogOpen, setGuestDialogOpen] = useState(false);
+  const [creatingGuest, setCreatingGuest] = useState(false);
 
-  const { control, handleSubmit, formState, watch } = useForm<
+  const { control, handleSubmit, formState, watch, setValue } = useForm<
     NewReservationInput,
     any,
     NewReservationForm
@@ -49,6 +58,28 @@ export default function NewReservationScreen({ navigation }: Props) {
       checkOutDate: undefined,
       numberOfGuests: 1,
       notes: '',
+    },
+  });
+
+  // Separate RHF instance for the "new guest" dialog — deliberately not
+  // nested under the reservation form above (different field names, no
+  // collision risk) so a guest can be created without losing whatever
+  // room/dates/notes were already filled in on the reservation itself.
+  const {
+    control: guestControl,
+    handleSubmit: handleGuestSubmit,
+    formState: guestFormState,
+    reset: resetGuestForm,
+  } = useForm<GuestFormInput, any, GuestForm>({
+    resolver: zodResolver(guestSchema),
+    mode: 'onTouched',
+    defaultValues: {
+      firstName: '',
+      lastName: '',
+      passportNumber: '',
+      phone: '',
+      email: '',
+      nationality: '',
     },
   });
 
@@ -149,6 +180,29 @@ export default function NewReservationScreen({ navigation }: Props) {
     }
   };
 
+  // Creates the guest inline (no navigation away from this screen, so
+  // whatever's already filled in above survives) and immediately selects
+  // them in the reservation's "Гость" field — no need to re-open the
+  // picker and hunt for the name that was just typed in.
+  const handleCreateGuest = async (data: GuestForm) => {
+    setCreatingGuest(true);
+    try {
+      const newGuest = await createGuest(data);
+      setGuests((list) => [newGuest, ...list]);
+      setValue('guestId', newGuest.id, {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+      setGuestDialogOpen(false);
+      resetGuestForm();
+    } catch (e: any) {
+      Alert.alert('Ошибка', e.message || 'Не удалось создать гостя');
+    } finally {
+      setCreatingGuest(false);
+    }
+  };
+
   if (loadingData) {
     return (
       <ScreenContainer maxWidth="reading">
@@ -170,7 +224,8 @@ export default function NewReservationScreen({ navigation }: Props) {
             // Without this banner the form just looks broken: tapping
             // "Выберите гостя" opens an empty Menu, the submit stays
             // disabled, and there's no obvious way to add a guest from
-            // here. One-tap shortcut to GuestForm fixes the dead end.
+            // here. Opens the same inline dialog as the button below —
+            // doesn't navigate away, so nothing already filled in is lost.
             <View style={styles.noticeCard}>
               <Text variant="titleSmall" style={styles.noticeTitle}>
                 Сначала добавьте гостя
@@ -182,7 +237,7 @@ export default function NewReservationScreen({ navigation }: Props) {
               <Button
                 mode="contained"
                 icon="account-plus"
-                onPress={() => navigation.navigate('GuestForm')}
+                onPress={() => setGuestDialogOpen(true)}
                 style={styles.noticeBtn}
               >
                 Добавить гостя
@@ -199,6 +254,18 @@ export default function NewReservationScreen({ navigation }: Props) {
               label: `${g.firstName} ${g.lastName}`,
             }))}
           />
+          {/* Always available, not just on an empty list — the guest
+              you're looking for not being there yet is the common case,
+              not just the "brand-new system" one. */}
+          <Button
+            mode="text"
+            icon="account-plus"
+            compact
+            onPress={() => setGuestDialogOpen(true)}
+            style={styles.addGuestBtn}
+          >
+            Гостя нет в списке — добавить нового
+          </Button>
 
           <FormSelect
             control={control}
@@ -297,6 +364,52 @@ export default function NewReservationScreen({ navigation }: Props) {
           </Button>
         </View>
       </ScrollView>
+
+      <Portal>
+        <Dialog
+          visible={guestDialogOpen}
+          onDismiss={() => setGuestDialogOpen(false)}
+          style={styles.guestDialog}
+        >
+          <Dialog.Title>Новый гость</Dialog.Title>
+          <Dialog.ScrollArea style={styles.guestDialogScroll}>
+            <ScrollView contentContainerStyle={styles.guestDialogContent}>
+              <FormTextInput control={guestControl} name="firstName" label="Имя *" />
+              <FormTextInput control={guestControl} name="lastName" label="Фамилия *" />
+              <FormTextInput
+                control={guestControl}
+                name="passportNumber"
+                label="Номер паспорта"
+              />
+              <FormTextInput
+                control={guestControl}
+                name="phone"
+                label="Телефон"
+                keyboardType="phone-pad"
+                mask={maskPhone}
+              />
+              <FormTextInput
+                control={guestControl}
+                name="email"
+                label="Email"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+              <FormTextInput control={guestControl} name="nationality" label="Гражданство" />
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setGuestDialogOpen(false)}>Отмена</Button>
+            <Button
+              onPress={handleGuestSubmit(handleCreateGuest)}
+              loading={creatingGuest}
+              disabled={creatingGuest || !guestFormState.isValid}
+            >
+              Создать
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScreenContainer>
   );
 }
@@ -335,4 +448,8 @@ const styles = StyleSheet.create({
   noticeTitle: { color: '#92400E', fontWeight: 'bold' },
   noticeBody: { color: '#92400E' },
   noticeBtn: { alignSelf: 'flex-start', marginTop: 4 },
+  addGuestBtn: { alignSelf: 'flex-start', marginTop: -8, marginBottom: 12 },
+  guestDialog: { maxHeight: '85%' },
+  guestDialogScroll: { paddingHorizontal: 0 },
+  guestDialogContent: { paddingHorizontal: 24 },
 });
