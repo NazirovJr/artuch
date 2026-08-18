@@ -113,6 +113,20 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * NestJS's default ValidationPipe returns `message` as an ARRAY of strings
+ * — one per failed field — not a single string. Left alone, `new Error(arr)`
+ * silently ToStrings it via `Array.prototype.join(',')`, producing a
+ * no-space, punctuation-less run-on ("fieldA must be X,fieldB must be Y")
+ * in every Alert that just shows `e.message`. Join it properly here so
+ * callers get a readable, semicolon-separated sentence instead.
+ */
+function formatApiMessage(body: any, fallback: string): string {
+  const { message } = body ?? {};
+  if (Array.isArray(message)) return message.join('; ');
+  return message || fallback;
+}
+
 let isRefreshing = false;
 let refreshPromise: Promise<boolean> | null = null;
 
@@ -245,7 +259,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
         }
         const body = await retryResponse.json().catch(() => ({}));
         throw new ApiError(
-          body.message || `HTTP ${retryResponse.status}`,
+          formatApiMessage(body, `HTTP ${retryResponse.status}`),
           retryResponse.status,
         );
       }
@@ -263,7 +277,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new ApiError(
-      body.message || `HTTP ${response.status}`,
+      formatApiMessage(body, `HTTP ${response.status}`),
       response.status,
     );
   }
